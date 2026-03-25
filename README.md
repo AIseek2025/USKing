@@ -40,6 +40,23 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 ---
 
+## Git 推送（大仓库 / 推送失败）
+
+向 GitHub 首次推送或对象较大时，若出现 **`unable to rewind rpc post data — try increasing http.postBuffer`**、**`RPC failed; curl 16 Error in the HTTP2 framing layer`** 或远端意外断开，可在**本仓库**执行（仅作用于当前仓库，不写进代码）：
+
+```bash
+git config http.postBuffer 524288000
+git config http.version HTTP/1.1
+git push -u origin main
+```
+
+- **`http.postBuffer`**：增大 HTTP 推送缓冲，避免大包体需要重绕失败。  
+- **`http.version HTTP/1.1`**：部分网络/代理下 Git 走 HTTP/2 会不稳定，强制 HTTP/1.1 常可恢复。
+
+若仅需全局默认（所有仓库），可把上述两条里的 `git config` 换成 `git config --global`。
+
+---
+
 ## 直播形式与内容
 
 | 来源 | 说明 |

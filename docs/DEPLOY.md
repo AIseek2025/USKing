@@ -63,3 +63,14 @@ docker compose -f docker-compose.prod.yml up -d --build
 - 不要将 `.env`、数据库文件、用户上传内容提交到 Git（见 `.gitignore`）。
 - 定期备份数据库与 `UPLOAD_DIR`。
 - 关注依赖漏洞：`pip audit` 或 GitHub Dependabot。
+
+## 8. 协作：Git 推送失败（大仓库）
+
+向远端 **`git push`** 若提示增大 **`http.postBuffer`** 或出现 **HTTP/2 framing** 类错误，可在仓库根目录执行：
+
+```bash
+git config http.postBuffer 524288000
+git config http.version HTTP/1.1
+```
+
+然后重试 `git push`。更完整的说明与全局配置方式见仓库根目录 [README.md](../README.md) 中的 **「Git 推送（大仓库 / 推送失败）」**。
