@@ -145,6 +145,10 @@ const I18N = {
       en: 'If this stays blank: the streamer must open the capture page, add a window, click Start live, and keep that tab open.',
     },
     'watch.stream_ended': { zh: '直播已结束或未推流', en: 'Stream ended or not publishing' },
+    'watch.ws_failed': {
+      zh: '无法连接直播画面',
+      en: 'Could not connect to the live feed',
+    },
     'watch.chat_title': { zh: '聊天（即将上线）', en: 'Chat (Coming Soon)' },
     'watch.chat_dev': { zh: '直播聊天功能开发中', en: 'Live chat feature in development' },
     'watch.offline': { zh: '当前没有在直播', en: 'Currently not streaming' },

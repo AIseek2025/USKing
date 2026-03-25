@@ -7,16 +7,45 @@
 {% endblock %}
 {% block scripts %}
 <script>
-const streamer='{{username}}';
+const streamer={{ streamer_json|safe }};
 
 let _watchWs = null;
 let _watchPing = null;
 let _watchImgUrl = null;
+let _watchReconnectTimer = null;
+let _watchFailCount = 0;
+const _WATCH_WS_MAX_RETRY = 8;
+
+function _tSafe(key, zh) {
+  if (typeof I18N !== 'undefined' && I18N.t) {
+    const s = I18N.t(key);
+    if (s && s !== key) return s;
+  }
+  return zh;
+}
+
+function _escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 function _stopWatchWs() {
-  if (_watchPing) { clearInterval(_watchPing); _watchPing = null; }
+  if (_watchReconnectTimer) {
+    clearTimeout(_watchReconnectTimer);
+    _watchReconnectTimer = null;
+  }
+  if (_watchPing) {
+    clearInterval(_watchPing);
+    _watchPing = null;
+  }
   if (_watchWs) {
-    try { _watchWs.close(); } catch (e) {}
+    try {
+      _watchWs.onclose = null;
+      _watchWs.close();
+    } catch (e) {}
     _watchWs = null;
   }
   if (_watchImgUrl) {
@@ -25,14 +54,45 @@ function _stopWatchWs() {
   }
 }
 
+function _showWatchWsError(htmlBody) {
+  const wait = document.getElementById('liveWsWait');
+  if (!wait) return;
+  wait.style.display = '';
+  wait.innerHTML =
+    '<div style="text-align:center;color:var(--text3);max-width:460px;padding:0 16px;line-height:1.6;font-size:13px">' +
+    htmlBody +
+    '</div>';
+}
+
 function _startWatchWs(username) {
-  _stopWatchWs();
+  if (_watchPing) {
+    clearInterval(_watchPing);
+    _watchPing = null;
+  }
+  if (_watchWs) {
+    try {
+      _watchWs.onclose = null;
+      _watchWs.close();
+    } catch (e) {}
+    _watchWs = null;
+  }
+
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/api/ws/live/watch/${encodeURIComponent(username)}`);
+  const ws = new WebSocket(
+    `${proto}://${location.host}/api/ws/live/watch/${encodeURIComponent(username)}`
+  );
   ws.binaryType = 'arraybuffer';
   _watchWs = ws;
+
   const img = document.getElementById('liveWsFrame');
   const wait = document.getElementById('liveWsWait');
+  const retryEl = document.getElementById('liveWsRetryHint');
+
+  ws.onopen = () => {
+    _watchFailCount = 0;
+    if (retryEl) retryEl.style.display = 'none';
+  };
+
   ws.onmessage = (ev) => {
     if (!(ev.data instanceof ArrayBuffer)) return;
     const u8 = new Uint8Array(ev.data);
@@ -45,12 +105,54 @@ function _startWatchWs(username) {
       img.src = _watchImgUrl;
     }
   };
+
   ws.onclose = () => {
-    if (wait && (!img || img.style.display === 'none')) {
-      wait.style.display = '';
-      wait.textContent = (typeof I18N !== 'undefined' && I18N.t) ? I18N.t('watch.stream_ended') : '直播已结束或未推流';
+    const gotFrame = img && img.style.display === 'block';
+    if (gotFrame) {
+      _showWatchWsError(
+        '<p style="color:var(--text2);font-weight:600">' +
+          _escapeHtml(_tSafe('watch.stream_ended', '直播已结束或未推流')) +
+          '</p>' +
+          '<p style="font-size:12px;margin-top:10px;color:var(--text3)">@' +
+          _escapeHtml(username) +
+          '</p>'
+      );
+      return;
     }
+    if (_watchFailCount < _WATCH_WS_MAX_RETRY) {
+      _watchFailCount++;
+      if (retryEl) {
+        retryEl.style.display = '';
+        retryEl.textContent =
+          (typeof I18N !== 'undefined' && I18N.lang === 'en' ? 'Reconnecting ' : '正在重连 ') +
+          '(' +
+          _watchFailCount +
+          '/' +
+          _WATCH_WS_MAX_RETRY +
+          ')…';
+      }
+      _watchReconnectTimer = setTimeout(() => {
+        _watchReconnectTimer = null;
+        _startWatchWs(username);
+      }, 1600);
+      return;
+    }
+    const nginxHint =
+      typeof I18N !== 'undefined' && I18N.lang === 'en'
+        ? 'If this persists, the server proxy may not support WebSockets (need Upgrade headers for <code>/api/ws/</code>). Also open the exact link the host shared (correct username).'
+        : '若一直无法观看：请让运维确认 Nginx 已对 <code>/api/ws/</code> 配置 WebSocket 升级（见部署文档）；并确认网址里的用户名与主播一致（当前房间 <strong>@' +
+          _escapeHtml(username) +
+          '</strong>）。主播需在「直播采集」页添加窗口并点击「开始直播」。';
+    _showWatchWsError(
+      '<p style="color:var(--text2);font-weight:600">' +
+        _escapeHtml(_tSafe('watch.ws_failed', '无法连接直播画面')) +
+        '</p>' +
+      '<p style="font-size:12px;margin-top:12px;color:var(--text3)">' +
+        nginxHint +
+        '</p>'
+    );
   };
+
   _watchPing = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) {
       try { ws.send('p'); } catch (e) {}
@@ -58,36 +160,44 @@ function _startWatchWs(username) {
   }, 20000);
 }
 
-async function loadWatch(){
-  const r=await APP.api('GET',`/api/live/user/${streamer}`);
-  const u=r.user;
-  const s=r.stream;
-  const el=document.getElementById('watchContent');
-  const av=u.avatar_url?`<img src="${u.avatar_url}" style="width:100%;height:100%;object-fit:cover">`:`<span style="font-size:18px;color:#000;font-weight:700">${(u.display_name||u.username)[0].toUpperCase()}</span>`;
-  const memberBadge=u.is_member?`<span class="badge badge-yellow">${I18N.t('common.year_member')}</span>`:'';
-  if(s&&s.is_live){
-    APP.api('POST',`/api/live/join/${streamer}`).catch(()=>{});
-    window.addEventListener('beforeunload',()=>{navigator.sendBeacon(`/api/live/leave/${streamer}`)});
-    el.innerHTML=`
+async function loadWatch() {
+  const r = await APP.api('GET', `/api/live/user/${encodeURIComponent(streamer)}`);
+  const u = r.user;
+  const s = r.stream;
+  const el = document.getElementById('watchContent');
+  const av = u.avatar_url
+    ? `<img src="${u.avatar_url}" style="width:100%;height:100%;object-fit:cover">`
+    : `<span style="font-size:18px;color:#000;font-weight:700">${(u.display_name || u.username)[0].toUpperCase()}</span>`;
+  const memberBadge = u.is_member
+    ? `<span class="badge badge-yellow">${I18N.t('common.year_member')}</span>`
+    : '';
+  if (s && s.is_live) {
+    APP.api('POST', `/api/live/join/${encodeURIComponent(streamer)}`).catch(() => {});
+    window.addEventListener('beforeunload', () => {
+      navigator.sendBeacon(`/api/live/leave/${encodeURIComponent(streamer)}`);
+    });
+    el.innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 320px;gap:16px">
         <div>
           <div style="background:#000;border-radius:var(--radius);aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
             <div style="position:absolute;top:12px;left:12px;display:flex;gap:8px;z-index:2">
               <span class="badge badge-red" style="font-size:12px;padding:4px 12px">LIVE</span>
-              <span class="badge badge-gray" style="font-size:12px;padding:4px 12px">👁 ${s.viewer_count||0}${I18N.t('watch.viewers')}</span>
+              <span class="badge badge-gray" style="font-size:12px;padding:4px 12px">👁 ${s.viewer_count || 0}${I18N.t('watch.viewers')}</span>
             </div>
             <img id="liveWsFrame" alt="" style="display:none;width:100%;height:100%;object-fit:contain;background:#000"/>
             <div id="liveWsWait" style="text-align:center;color:var(--text3);max-width:420px;padding:0 16px;z-index:1">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               <p style="font-size:14px;margin-top:10px;color:var(--text2);font-weight:600">${I18N.t('watch.connecting')}</p>
               <p style="font-size:12px;margin-top:8px;line-height:1.55;color:var(--text3)">${I18N.t('watch.wait_capture')}</p>
+              <p style="font-size:11px;margin-top:8px;color:var(--text3)">${typeof I18N !== 'undefined' && I18N.lang === 'en' ? 'Room' : '当前房间'}：<strong>@${_escapeHtml(u.username)}</strong>${u.username !== streamer ? ' <span style="color:var(--accent)">(URL: @' + _escapeHtml(streamer) + ')</span>' : ''}</p>
+              <p id="liveWsRetryHint" style="display:none;font-size:12px;color:var(--accent);margin-top:10px"></p>
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:12px">
             <a href="/u/${u.username}" class="profile-avatar" style="width:48px;height:48px;font-size:20px;flex-shrink:0">${av}</a>
             <div>
-              <h2 style="font-size:18px">${s.title||(I18N.t('common.live'))}</h2>
-              <div style="font-size:13px;color:var(--text3);display:flex;align-items:center;gap:8px;margin-top:4px"><a href="/u/${u.username}">${u.display_name||u.username}</a> ${memberBadge}</div>
+              <h2 style="font-size:18px">${s.title || I18N.t('common.live')}</h2>
+              <div style="font-size:13px;color:var(--text3);display:flex;align-items:center;gap:8px;margin-top:4px"><a href="/u/${u.username}">${u.display_name || u.username}</a> ${memberBadge}</div>
             </div>
           </div>
         </div>
@@ -96,14 +206,15 @@ async function loadWatch(){
           <div style="height:300px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:13px">${I18N.t('watch.chat_dev')}</div>
         </div>
       </div>`;
+    _watchFailCount = 0;
     _startWatchWs(streamer);
     window.addEventListener('beforeunload', _stopWatchWs);
-  }else{
+  } else {
     _stopWatchWs();
-    el.innerHTML=`<div class="card" style="text-align:center;padding:48px">
+    el.innerHTML = `<div class="card" style="text-align:center;padding:48px">
       <div style="display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:20px">
         <div class="profile-avatar" style="width:60px;height:60px;font-size:24px">${av}</div>
-        <div style="text-align:left"><h2>${u.display_name||u.username}</h2><p style="color:var(--text3);font-size:13px">@${u.username} ${memberBadge}</p></div>
+        <div style="text-align:left"><h2>${u.display_name || u.username}</h2><p style="color:var(--text3);font-size:13px">@${u.username} ${memberBadge}</p></div>
       </div>
       <p style="color:var(--text2);font-size:15px;margin-bottom:20px">${I18N.t('watch.offline')}</p>
       <a href="/u/${u.username}" class="btn btn-ghost">${I18N.t('watch.view_profile')}</a>

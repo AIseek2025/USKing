@@ -10,6 +10,7 @@ from fastapi.exception_handlers import (
 )
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
+import json
 import logging
 import os
 
@@ -268,7 +269,11 @@ async def user_profile_page(request: Request, username: str):
 
 @app.api_route("/live/{username}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def watch_live(request: Request, username: str):
-    return templates.TemplateResponse(request, "watch.html", {"username": username})
+    return templates.TemplateResponse(
+        request,
+        "watch.html",
+        {"username": username, "streamer_json": json.dumps(username)},
+    )
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
