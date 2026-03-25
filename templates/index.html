@@ -571,6 +571,50 @@ function liveStreamThumbInner(u){
   }
   return `<div aria-hidden="true" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#1a2332 0%,#0f172a 48%,#292524 100%);font-size:clamp(32px,11vw,52px);font-weight:800;color:rgba(245,158,11,.42)">${init}</div>`;
 }
+/** 直播卡片：底层占位 + 轮询 last-frame 覆盖（与观看页同源） */
+function liveStreamThumbStack(u){
+  u=u||{};
+  const enc=encodeURIComponent(u.username||'');
+  return `<div style="position:absolute;inset:0;z-index:0">${liveStreamThumbInner(u)}</div><img class="live-last-frame" alt="" data-live-user="${enc}" decoding="async" />`;
+}
+let _liveThumbPollTimer=null;
+function _revokeLiveThumbsIn(root){
+  if(!root)return;
+  root.querySelectorAll('img.live-last-frame').forEach((img)=>{
+    const s=img.getAttribute('src')||'';
+    if(s.startsWith('blob:')){try{URL.revokeObjectURL(s)}catch(e){}}
+  });
+}
+function _liveThumbPollTick(){
+  const imgs=document.querySelectorAll('img.live-last-frame');
+  const active=Array.from(imgs).filter((img)=>img.offsetParent!==null);
+  if(!active.length){
+    if(_liveThumbPollTimer){clearInterval(_liveThumbPollTimer);_liveThumbPollTimer=null;}
+    return;
+  }
+  active.forEach((img)=>{
+    const raw=img.getAttribute('data-live-user');
+    if(raw==null)return;
+    let un='';
+    try{un=decodeURIComponent(raw)}catch(e){return}
+    if(!un)return;
+    fetch(location.origin+'/api/live/last-frame/'+encodeURIComponent(un)+'?t='+Date.now(),{credentials:'omit',cache:'no-store'})
+      .then((r)=>{if(r.status===404)return null;if(!r.ok)throw 0;return r.blob()})
+      .then((blob)=>{
+        if(!blob||!blob.size)return;
+        const url=URL.createObjectURL(blob);
+        const prev=img.getAttribute('src')||'';
+        if(prev.startsWith('blob:')){try{URL.revokeObjectURL(prev)}catch(e){}}
+        img.src=url;
+        img.classList.add('is-visible');
+      })
+      .catch(()=>{});
+  });
+}
+function ensureLiveThumbsPolling(){
+  _liveThumbPollTick();
+  if(!_liveThumbPollTimer)_liveThumbPollTimer=setInterval(_liveThumbPollTick,400);
+}
 function _tf(k,v){ return (typeof I18N!=='undefined'&&I18N.fmt)?I18N.fmt(k,v):k; }
 /** 与 DOM 中实际激活的 panel 同步（避免 currentPanel 与界面不一致导致切换语言后不刷新） */
 function _spaActivePanel(){
@@ -655,6 +699,7 @@ function switchPanel(name, el){
   }
 
   if(name === 'live' && !panelLoaded.live){ panelLoaded.live=true; loadLivePanel(); }
+  if(name === 'live') ensureLiveThumbsPolling();
   if(name === 'courses' && !panelLoaded.courses){ panelLoaded.courses=true; loadCoursesPanel(); }
   if(name === 'dashboard' && !panelLoaded.dashboard){ panelLoaded.dashboard=true; initDashboard(); }
   if(name === 'about' && !panelLoaded.about){ panelLoaded.about=true; fetch('/partial/about').then(r=>r.text()).then(h=>{document.getElementById('aboutContent').innerHTML=h; if(typeof I18N!=='undefined') I18N.apply();}); }
@@ -689,17 +734,20 @@ async function loadLivePanel(){
     const cnt = document.getElementById('liveCount');
     const streams = r.streams || [];
     if(!streams.length){
+      _revokeLiveThumbsIn(grid);
       cnt.textContent='';
       grid.innerHTML=`<div class="empty-state" style="grid-column:1/-1"><p>${_t('spa.live_empty')}</p><a href="javascript:switchPanel('dashboard',document.querySelector('[data-panel=dashboard]'))" class="btn btn-primary btn-sm">${_t('spa.go_live')}</a></div>`;
       return;
     }
+    _revokeLiveThumbsIn(grid);
     cnt.textContent=`(${streams.length})`;
     grid.innerHTML=streams.map(s=>{
       const u=s.user||{};const init=(u.display_name||u.username||'?')[0].toUpperCase();
       return `<a href="/live/${u.username}" class="stream-card" style="color:inherit;text-decoration:none">
-        <div class="stream-thumb">${liveStreamThumbInner(u)}<div class="live-dot">LIVE</div><div class="viewer-count">${s.viewer_count||0}</div></div>
+        <div class="stream-thumb">${liveStreamThumbStack(u)}<div class="live-dot">LIVE</div><div class="viewer-count">${s.viewer_count||0}</div></div>
         <div class="stream-info"><div class="si-title">${s.title||_t('spa.streaming')}</div><div class="si-user"><div class="si-avatar">${init}</div>${u.display_name||u.username}</div></div></a>`;
     }).join('');
+    ensureLiveThumbsPolling();
   }catch{}
 }
 
@@ -2205,6 +2253,7 @@ function srTab(t){
 function srRenderResults(){
   const box=document.getElementById('srResults');
   if(!box) return;
+  _revokeLiveThumbsIn(box);
   let html='';
   if(srCurrentTab==='all'||srCurrentTab==='courses'){
     if(srData.courses?.length){
@@ -2222,7 +2271,7 @@ function srRenderResults(){
       html+=`<div class="stream-grid">${srData.streams.map(s=>{
         const u=s.user||{};
         return `<div class="stream-card" style="cursor:pointer" onclick="switchPanel('live',document.querySelector('[data-panel=live]'))">
-          <div class="stream-thumb">${liveStreamThumbInner(u)}<div class="live-dot">LIVE</div><div class="viewer-count">${s.viewer_count||0}</div></div>
+          <div class="stream-thumb">${liveStreamThumbStack(u)}<div class="live-dot">LIVE</div><div class="viewer-count">${s.viewer_count||0}</div></div>
           <div class="stream-info"><div class="si-title">${s.title||_t('spa.streaming')}</div><div class="si-user">${u.display_name||u.username||''}</div></div>
         </div>`;
       }).join('')}</div>`;
@@ -2249,6 +2298,7 @@ function srRenderResults(){
   }
   if(!html) html=`<div class="empty-state"><p>${_t('spa.sr_none')}</p></div>`;
   box.innerHTML=html;
+  if(box.querySelector('img.live-last-frame')) ensureLiveThumbsPolling();
 }
 
 /* ===== COMMENTS (Douyin-style) ===== */
