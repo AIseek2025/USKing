@@ -253,7 +253,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
       <button class="btn-live ready" id="btnLive" disabled onclick="toggleLive()">
         <span class="rec-dot"></span> 开始直播
       </button>
-      <p class="hint">添加至少一个窗口后点击开始直播：画面将同步给站内 /live 观众（请保持本页打开）。</p>
+      <p class="hint">添加至少一个窗口后点击开始直播：画面经 HTTP 同步给 /live 观众（无需 Nginx WebSocket；请保持本页打开）。</p>
     </div>
   </div>
 </div>
@@ -296,9 +296,9 @@ let timerInterval = null;
 let currentLayout = 'auto';
 let mediaRecorder = null;
 let recordedChunks = [];
-/** 站内直播：推 JPEG 到 /api/ws/live/publish */
-let publishWs = null;
+/** 站内直播：推 JPEG 到 /api/live/push-frame（普通 HTTP，无需 Nginx WebSocket） */
 let framePushTimer = null;
+let framePushInFlight = false;
 let streamCanvas = null;
 let streamCtx = null;
 
@@ -562,19 +562,36 @@ function ensureStreamCanvas() {
 function startFramePushToSite() {
   ensureStreamCanvas();
   if (framePushTimer) clearInterval(framePushTimer);
+  framePushInFlight = false;
   framePushTimer = setInterval(() => {
-    if (!publishWs || publishWs.readyState !== WebSocket.OPEN) return;
-    if (sources.length === 0) return;
+    if (!isLive || sources.length === 0 || framePushInFlight) return;
     try {
       streamCtx.drawImage(canvas, 0, 0, 960, 540);
     } catch (e) { return; }
     streamCanvas.toBlob((blob) => {
-      if (!blob || !publishWs || publishWs.readyState !== WebSocket.OPEN) return;
-      blob.arrayBuffer().then((buf) => {
-        try { publishWs.send(buf); } catch (e) {}
-      });
+      if (!blob || !isLive) return;
+      framePushInFlight = true;
+      blob
+        .arrayBuffer()
+        .then((buf) =>
+          fetch(location.origin + '/api/live/push-frame', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'image/jpeg' },
+            body: buf,
+          })
+        )
+        .then((res) => {
+          if (res.status === 401) {
+            alert('登录已失效，请关闭直播页签、重新登录后再开播。');
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          framePushInFlight = false;
+        });
     }, 'image/jpeg', 0.72);
-  }, 100);
+  }, 120);
 }
 
 function stopFramePushToSite() {
@@ -582,45 +599,7 @@ function stopFramePushToSite() {
     clearInterval(framePushTimer);
     framePushTimer = null;
   }
-}
-
-function closePublishWs() {
-  stopFramePushToSite();
-  if (publishWs) {
-    try { publishWs.close(); } catch (e) {}
-    publishWs = null;
-  }
-}
-
-async function connectPublishWs() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const url = `${proto}://${location.host}/api/ws/live/publish`;
-  const ws = new WebSocket(url);
-  publishWs = ws;
-  await new Promise((resolve, reject) => {
-    let settled = false;
-    const to = setTimeout(() => {
-      if (!settled) { settled = true; reject(new Error('timeout')); }
-    }, 12000);
-    ws.onopen = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(to);
-      resolve();
-    };
-    ws.onerror = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(to);
-      reject(new Error('ws'));
-    };
-    ws.onclose = (ev) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(to);
-      reject(new Error('close:' + ev.code));
-    };
-  });
+  framePushInFlight = false;
 }
 
 async function toggleLive() {
@@ -644,11 +623,9 @@ async function toggleLive() {
         alert('无法开始站内直播：' + msg + '\n请确认已登录且账号已开通直播权限。');
         return;
       }
-      await connectPublishWs();
     } catch (e) {
       console.error(e);
-      alert('连接直播通道失败：请确认已登录本站（同域名 Cookie），且已在数据库中开启直播权限。');
-      closePublishWs();
+      alert('开始直播请求失败：请确认已登录本站（同域名 Cookie）。');
       return;
     }
     isLive = true;
@@ -672,7 +649,7 @@ async function toggleLive() {
     } catch(e) { console.log('Recording not supported:', e); }
   } else {
     isLive = false;
-    closePublishWs();
+    stopFramePushToSite();
     try {
       await fetch(location.origin + '/api/live/stop', { method: 'POST', credentials: 'include' });
     } catch (e) {}

@@ -1,7 +1,10 @@
 """
-站内直播：主播在 /app/live.html 通过 WebSocket 推送 JPEG 帧，服务器广播给所有观看 /live/{username} 的访客。
+站内直播：主播推送 JPEG，观众拉流。
 
-约束：状态仅存进程内存；uvicorn 多 worker 时各进程独立，请生产使用 --workers 1 或后续接 Redis 广播。
+- WebSocket（需 Nginx Upgrade）：/api/ws/live/publish、/api/ws/live/watch/{username}
+- HTTP 回退（普通反代即可）：POST /api/live/push-frame（Cookie）、GET /api/live/mjpeg/{username}（multipart MJPEG）
+
+约束：状态仅存进程内存；生产请 uvicorn --workers 1。
 """
 
 from __future__ import annotations
@@ -11,10 +14,11 @@ import logging
 from collections import defaultdict
 from typing import DefaultDict, Dict, List, Optional
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from .auth import decode_token
+from .auth import decode_token, require_user
 from .database import SessionLocal
 from .models import LiveStream, User
 
@@ -25,10 +29,33 @@ _state_lock = asyncio.Lock()
 _publishers: Dict[str, WebSocket] = {}
 _viewers: DefaultDict[str, List[WebSocket]] = defaultdict(list)
 _last_jpeg: Dict[str, bytes] = {}
+_frame_ver: Dict[str, int] = defaultdict(int)
+_post_check_counter: DefaultDict[str, int] = defaultdict(int)
+
+MJPEG_BOUNDARY = b"frame"
+MJPEG_SEP = b"--frame\r\n"
 
 
 def _jpeg_ok(data: bytes) -> bool:
     return 800 <= len(data) <= 1_800_000 and data[:3] == b"\xff\xd8\xff"
+
+
+async def _broadcast_jpeg(un: str, data: bytes) -> None:
+    _last_jpeg[un] = data
+    _frame_ver[un] += 1
+    dead: List[WebSocket] = []
+    for vw in list(_viewers.get(un, [])):
+        try:
+            await vw.send_bytes(data)
+        except Exception:
+            dead.append(vw)
+    if dead:
+        async with _state_lock:
+            lst = _viewers.get(un)
+            if lst:
+                for w in dead:
+                    if w in lst:
+                        lst.remove(w)
 
 
 async def _auth_publisher(websocket: WebSocket) -> Optional[User]:
@@ -43,6 +70,86 @@ async def _auth_publisher(websocket: WebSocket) -> Optional[User]:
         return db.query(User).filter(User.id == uid, User.is_active == True).first()
     finally:
         db.close()
+
+
+@router.post("/live/push-frame")
+async def live_push_frame(request: Request, user: User = Depends(require_user)):
+    """采集页通过普通 HTTP 上传 JPEG（不依赖 WebSocket Upgrade）。"""
+    if not user.live_enabled:
+        raise HTTPException(status_code=403, detail="直播权限已关闭")
+    body = await request.body()
+    if not _jpeg_ok(body):
+        raise HTTPException(status_code=400, detail="无效 JPEG")
+
+    db: Session = SessionLocal()
+    try:
+        stream = (
+            db.query(LiveStream)
+            .filter(LiveStream.user_id == user.id, LiveStream.is_live == True)
+            .first()
+        )
+    finally:
+        db.close()
+    if not stream:
+        raise HTTPException(status_code=409, detail="未在直播中，请先开始直播")
+
+    n = _post_check_counter[user.id] + 1
+    _post_check_counter[user.id] = n
+    if n % 45 == 0:
+        db_chk: Session = SessionLocal()
+        try:
+            still = (
+                db_chk.query(LiveStream)
+                .filter(
+                    LiveStream.user_id == user.id,
+                    LiveStream.is_live == True,
+                )
+                .first()
+            )
+        finally:
+            db_chk.close()
+        if not still:
+            raise HTTPException(status_code=409, detail="直播已结束")
+
+    un = user.username
+    await _broadcast_jpeg(un, body)
+    return {"ok": True}
+
+
+@router.get("/live/mjpeg/{username}")
+async def live_mjpeg(username: str):
+    """浏览器 <img src=...> 可播放的 MJPEG（multipart/x-mixed-replace），走普通 HTTP。"""
+    un = username.strip()
+    if not un:
+        raise HTTPException(status_code=400, detail="无效用户名")
+
+    async def gen():
+        last_v = 0
+        while True:
+            data = _last_jpeg.get(un)
+            v = _frame_ver.get(un, 0)
+            if data and v > last_v:
+                last_v = v
+                header = (
+                    MJPEG_SEP
+                    + b"Content-Type: image/jpeg\r\nContent-Length: "
+                    + str(len(data)).encode()
+                    + b"\r\n\r\n"
+                    + data
+                    + b"\r\n"
+                )
+                yield header
+            await asyncio.sleep(0.04)
+
+    return StreamingResponse(
+        gen(),
+        media_type=f"multipart/x-mixed-replace; boundary={MJPEG_BOUNDARY.decode()}",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.websocket("/ws/live/publish")
@@ -109,20 +216,7 @@ async def ws_live_publish(websocket: WebSocket):
                 if not still:
                     await websocket.close(code=1008)
                     break
-            _last_jpeg[un] = data
-            dead: List[WebSocket] = []
-            for vw in list(_viewers.get(un, [])):
-                try:
-                    await vw.send_bytes(data)
-                except Exception:
-                    dead.append(vw)
-            if dead:
-                async with _state_lock:
-                    lst = _viewers.get(un)
-                    if lst:
-                        for w in dead:
-                            if w in lst:
-                                lst.remove(w)
+            await _broadcast_jpeg(un, data)
     except WebSocketDisconnect:
         pass
     finally:

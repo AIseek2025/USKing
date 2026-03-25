@@ -122,8 +122,8 @@ const I18N = {
     'dash.bitrate': { zh: '码率', en: 'Bitrate' },
     'dash.stream_url_label': { zh: '直播链接', en: 'Stream URL' },
     'dash.viewer_video_note': {
-      zh: '说明：站内观众在 /live 链接观看的是「直播采集」页推送的画面（JPEG 约 10fps）。请保持采集页打开；若仅在后台点了开始直播而未开采集页，观众会看到等待画面。大并发或高清建议后续改用 HLS/CDN。',
-      en: 'In-site viewers see frames from the capture tab (~10 fps JPEG). Keep that tab open. For scale/HD, plan HLS or a CDN later.',
+      zh: '说明：观众端通过 HTTP 拉 MJPEG，主播端用 HTTP 上传 JPEG（一般无需配置 Nginx WebSocket）。请保持「直播采集」页打开并点击「开始直播」。大并发建议后续 HLS/CDN。',
+      en: 'Viewers pull MJPEG over HTTP; the capture page uploads JPEG via HTTP (usually no WebSocket in Nginx). Keep the capture tab open. For scale, use HLS/CDN later.',
     },
     'dash.copy_btn': { zh: '复制', en: 'Copy' },
     'dash.layout_auto': { zh: '自动', en: 'Auto' },
@@ -141,8 +141,8 @@ const I18N = {
     },
     'watch.connecting': { zh: '正在连接直播画面…', en: 'Connecting to live feed…' },
     'watch.wait_capture': {
-      zh: '若长时间无画面：请主播打开「直播采集」页，添加窗口后点击「开始直播」，并保持该页不要关闭。',
-      en: 'If this stays blank: the streamer must open the capture page, add a window, click Start live, and keep that tab open.',
+      zh: '画面走普通 HTTP（无需 WebSocket）。若仍无画面：请主播在采集页点击「开始直播」并保持该页打开；或稍后刷新本页。',
+      en: 'Video uses HTTP MJPEG (no WebSocket). If blank: the host must Start live on the capture page and keep it open, or refresh.',
     },
     'watch.stream_ended': { zh: '直播已结束或未推流', en: 'Stream ended or not publishing' },
     'watch.ws_failed': {
