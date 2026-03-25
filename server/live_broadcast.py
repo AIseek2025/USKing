@@ -117,8 +117,8 @@ async def live_push_frame(request: Request, user: User = Depends(require_user)):
     return {"ok": True}
 
 
-@router.get("/live/last-frame/{username}")
-async def live_last_frame(username: str):
+@router.api_route("/live/last-frame/{username}", methods=["GET", "HEAD"])
+async def live_last_frame(username: str, request: Request):
     """返回内存中最新一帧 JPEG（短请求，适合 Nginx 默认缓冲；观看页轮询）。"""
     un = username.strip()
     if not un:
@@ -126,14 +126,14 @@ async def live_last_frame(username: str):
     data = _last_jpeg.get(un)
     if not data:
         raise HTTPException(status_code=404, detail="暂无画面")
-    return Response(
-        content=data,
-        media_type="image/jpeg",
-        headers={
-            "Cache-Control": "no-store, no-cache, must-revalidate",
-            "Pragma": "no-cache",
-        },
-    )
+    headers = {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        "Pragma": "no-cache",
+        "Content-Length": str(len(data)),
+    }
+    if request.method == "HEAD":
+        return Response(content=b"", media_type="image/jpeg", headers=headers)
+    return Response(content=data, media_type="image/jpeg", headers=headers)
 
 
 @router.get("/live/mjpeg/{username}")

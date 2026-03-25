@@ -84,6 +84,7 @@ location /api/ws/ {
 
   - 修改后执行 `sudo nginx -t && sudo systemctl reload nginx`。
   - WS 自测应返回 **`101 Switching Protocols`**：`curl -sI -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' 'https://你的域名/api/ws/live/watch/testuser'`
+  - **`curl -I` / `curl -sI` 发的是 HEAD**；`/api/live/last-frame/` 已支持 HEAD。要拉一整张图自检请用：`curl -sS -o /tmp/f.jpg 'https://你的域名/api/live/last-frame/用户名'`（GET）。
 
 - 直播状态仅在 **单进程** 内存中广播；`uvicorn --workers` 大于 1 时各 worker 互不共享。**站内直播建议 `--workers 1`**，或后续改为 Redis 等跨进程方案。
 
