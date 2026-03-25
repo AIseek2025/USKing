@@ -11,7 +11,7 @@
 | `MEIGUWANG_ADMIN_PASSWORD` | 首次启动创建 `admin` 时使用的密码；**仅在库中无 admin 时生效**。创建后请改密或依赖业务侧账号体系。 |
 | 数据库 | 单机可用 SQLite（注意备份 `*.db`）；多实例请用 PostgreSQL 等，并设置 `DATABASE_URL`。PostgreSQL 需安装驱动：`pip install psycopg2-binary`。 |
 | HTTPS | 生产务必由 **Nginx / Caddy / 云 LB** 终止 TLS，反代到本服务（如 `127.0.0.1:8000`）。 |
-| 静态与上传 | 默认上传目录为项目下 `static/uploads`；Docker 示例通过 `UPLOAD_DIR=/data/uploads` 挂载卷持久化。应用已将 **`/static/uploads` URL 映射到 `UPLOAD_DIR`**，与 `StaticFiles(/app/static)` 分离，避免生产环境文件写入卷而静态仍读镜像内目录导致 **头像/图片 404**。 |
+| 静态与上传 | 默认上传目录为项目下 `static/uploads`；Docker 示例通过 `UPLOAD_DIR=/data/uploads` 挂载卷持久化。访问 **`/static/uploads/*` 由独立路由从 `UPLOAD_DIR` 读盘**，避免被 `StaticFiles(/app/static)` 抢先匹配到镜像内空目录导致 **头像/图片 404**。 |
 
 应用启动时若 `DEV_MODE=false` 且仍使用默认 `SECRET_KEY`，进程会**直接退出**（防止误部署）。
 

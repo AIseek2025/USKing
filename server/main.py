@@ -1,7 +1,7 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import (
     http_exception_handler,
@@ -75,8 +75,23 @@ except Exception:
 app = FastAPI(title="美股王交易直播平台")
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-# 上传写入 UPLOAD_DIR（生产常为 /data/uploads），与整站 StaticFiles(/app/static) 可能不一致；须先挂载 /static/uploads 指向实际目录，否则头像/动态图片 404
-app.mount("/static/uploads", StaticFiles(directory=UPLOAD_DIR), name="static_uploads")
+
+
+@app.get("/static/uploads/{filename}")
+async def serve_static_upload(filename: str):
+    """上传文件在 UPLOAD_DIR（如 Docker 的 /data/uploads），须在 mount /static 之前注册，避免被 /app/static 空目录抢先匹配导致 404。"""
+    if len(filename) > 255 or "/" in filename or "\\" in filename or "\x00" in filename:
+        raise HTTPException(status_code=404, detail="Not Found")
+    path = os.path.join(UPLOAD_DIR, filename)
+    real_root = os.path.realpath(UPLOAD_DIR)
+    real_file = os.path.realpath(path)
+    if not real_file.startswith(real_root + os.sep) and real_file != real_root:
+        raise HTTPException(status_code=404, detail="Not Found")
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(path)
+
+
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 # Serve the live.html capture page
 app.mount("/app", StaticFiles(directory=os.path.join(BASE_DIR, "app"), html=True), name="app_static")
