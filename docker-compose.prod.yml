@@ -5,8 +5,10 @@ services:
   web:
     build: .
     image: usking-web:latest
+    container_name: usking-web
+    # 宿主机端口须与 Nginx proxy_pass（如 127.0.0.1:8002）一致；8000 常被其他站占用
     ports:
-      - "8000:8000"
+      - "8002:8000"
     env_file:
       - .env
     environment:
