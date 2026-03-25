@@ -77,9 +77,9 @@ app = FastAPI(title="美股王交易直播平台")
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 
-@app.get("/static/uploads/{filename}")
+@app.api_route("/static/uploads/{filename}", methods=["GET", "HEAD"])
 async def serve_static_upload(filename: str):
-    """上传文件在 UPLOAD_DIR（如 Docker 的 /data/uploads），须在 mount /static 之前注册，避免被 /app/static 空目录抢先匹配导致 404。"""
+    """上传文件在 UPLOAD_DIR。须注册 HEAD：仅 GET 时 HEAD 会变成 PARTIAL，会被 Mount(/static) 抢先 FULL 匹配到镜像内目录导致 404（curl -I、部分代理会发 HEAD）。"""
     if len(filename) > 255 or "/" in filename or "\\" in filename or "\x00" in filename:
         raise HTTPException(status_code=404, detail="Not Found")
     path = os.path.join(UPLOAD_DIR, filename)
