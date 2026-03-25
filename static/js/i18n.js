@@ -144,6 +144,10 @@ const I18N = {
       zh: '本页约每秒多次拉取最新画面（短 HTTP），不依赖 WebSocket、也不易被 Nginx 缓冲卡死。若仍无画面：请主播在采集页添加窗口并点「开始直播」，并保持该页打开。',
       en: 'This page polls JPEG over short HTTP requests (no WebSocket, proxy-friendly). If blank: the host must add a window, Start live, and keep the capture tab open.',
     },
+    'watch.no_server_frame': {
+      zh: '服务器尚未收到画面（last-frame 会返回 404）。请主播保持「直播采集」页打开，并在开发者工具 Network 中确认对 /api/live/push-frame 的请求为 200；若容器刚重启需重新推流。',
+      en: 'Server has no frame yet (last-frame returns 404). Keep the capture tab open and verify POST /api/live/push-frame is 200 in Network; republish after container restart.',
+    },
     'watch.stream_ended': { zh: '直播已结束或未推流', en: 'Stream ended or not publishing' },
     'watch.ws_failed': {
       zh: '无法连接直播画面',

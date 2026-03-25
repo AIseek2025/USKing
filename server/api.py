@@ -20,7 +20,7 @@ from .config import (
     ALLOWED_MEDIA_EXT,
 )
 from .routes_us_market import router as _us_market_router
-from .live_broadcast import router as _live_ws_router
+from .live_broadcast import router as _live_ws_router, username_has_frame
 
 router = APIRouter(prefix="/api")
 router.include_router(_us_market_router)
@@ -775,7 +775,11 @@ def get_user_stream(username: str, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(404)
     stream = db.query(LiveStream).filter(LiveStream.user_id == user.id, LiveStream.is_live == True).first()
-    return {"stream": _stream_dict(stream) if stream else None, "user": _user_dict(user)}
+    return {
+        "stream": _stream_dict(stream) if stream else None,
+        "user": _user_dict(user),
+        "has_live_frame_buffer": username_has_frame(username),
+    }
 
 
 @router.post("/live/join/{username}")

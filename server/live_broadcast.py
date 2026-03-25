@@ -41,6 +41,15 @@ def _jpeg_ok(data: bytes) -> bool:
     return 800 <= len(data) <= 1_800_000 and data[:3] == b"\xff\xd8\xff"
 
 
+def username_has_frame(username: str) -> bool:
+    """与 last-frame 同一套 key（strip 后的 username）。"""
+    un = (username or "").strip()
+    if not un:
+        return False
+    data = _last_jpeg.get(un)
+    return bool(data and _jpeg_ok(data))
+
+
 async def _broadcast_jpeg(un: str, data: bytes) -> None:
     _last_jpeg[un] = data
     _frame_ver[un] += 1
