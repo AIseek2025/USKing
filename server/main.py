@@ -262,11 +262,11 @@ async def login_page(request: Request):
 async def register_page(request: Request):
     return templates.TemplateResponse(request, "register.html")
 
-@app.get("/u/{username}", response_class=HTMLResponse)
+@app.api_route("/u/{username}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def user_profile_page(request: Request, username: str):
     return templates.TemplateResponse(request, "profile.html", {"username": username})
 
-@app.get("/live/{username}", response_class=HTMLResponse)
+@app.api_route("/live/{username}", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def watch_live(request: Request, username: str):
     return templates.TemplateResponse(request, "watch.html", {"username": username})
 
