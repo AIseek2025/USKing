@@ -18,6 +18,8 @@ uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 
 开发环境可保持 `DEV_MODE=true`（默认）；未设置 `MEIGUWANG_ADMIN_PASSWORD` 时，开发模式可使用默认管理员（见启动日志，**切勿用于生产**）。
 
+站内 **公司投研** 频道（侧栏）默认使用 **SEC 官方披露**；若需按代码聚合公开新闻，请在 `.env` 中配置免费注册的 **`FINNHUB_API_KEY`** 和/或 **`ALPHA_VANTAGE_API_KEY`**（见 `.env.example` 注释与 [docs/DEPLOY.md](docs/DEPLOY.md)）。
+
 ---
 
 ## 生产上线

@@ -22,6 +22,37 @@ MEMBERSHIP_PRICE_CENTS = 20000  # $200
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
+# 美股数据面板：FRED / NewsAPI / SEC 请求头 / 自选 RSS（逗号分隔 URL）
+FRED_API_KEY = os.getenv("FRED_API_KEY", "").strip()
+NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "").strip()
+_rss = os.getenv("NEWS_RSS_URLS", "").strip()
+NEWS_RSS_URLS = [u.strip() for u in _rss.split(",") if u.strip()]
+# 未配置 NewsAPI 且未配置 RSS 时，是否启用内置官方源（SEC 新闻稿 RSS）。设 NEWS_RSS_DISABLE_BUILTIN=1 可关闭。
+NEWS_RSS_BUILTIN_DISABLED = os.getenv("NEWS_RSS_DISABLE_BUILTIN", "").lower() in ("1", "true", "yes")
+NEWS_RSS_BUILTIN_URLS = (
+    ()
+    if NEWS_RSS_BUILTIN_DISABLED
+    else ("https://www.sec.gov/news/pressreleases.rss",)
+)
+
+
+def effective_news_rss_urls() -> list[str]:
+    """已配置自定义 RSS 时仅用自定义；否则若有 NewsAPI 则不拉 RSS；再否则使用内置官方 RSS（如 SEC 新闻稿）。"""
+    if NEWS_RSS_URLS:
+        return NEWS_RSS_URLS[:8]
+    if NEWSAPI_KEY:
+        return []
+    return list(NEWS_RSS_BUILTIN_URLS)[:8]
+# SEC 对 User-Agent 较敏感：勿在默认值中使用 https:// 等易被拦截的片段；生产请改为真实联系邮箱。
+SEC_HTTP_USER_AGENT = os.getenv(
+    "SEC_HTTP_USER_AGENT",
+    "USKing/1.0 (USKing-Data-Panel contact@example.com)",
+).strip()
+
+# 免费层公司资讯（需在各官网注册 API Key，零月费；有调用频率限制）
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "").strip()
+ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY", "").strip()
+
 _BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 # 生产可挂载卷并设置 UPLOAD_DIR=/data/uploads（须为绝对路径）
 _UP = os.getenv("UPLOAD_DIR", "").strip()

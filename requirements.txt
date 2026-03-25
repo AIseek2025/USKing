@@ -5,6 +5,11 @@ python-jose[cryptography]
 python-multipart
 aiosmtplib
 jinja2
-stripe
+# stripe 尚未为 Python 3.14 提供 wheel；3.14 本地开发可跳过（代码未 import stripe，仅预留支付字段）
+stripe; python_version < "3.14"
 httpx
 pydantic[email]
+pandas>=2.0
+yfinance>=0.2.40
+pyfredapi>=0.10.0
+feedparser>=6.0

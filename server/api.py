@@ -19,8 +19,10 @@ from .config import (
     ALLOWED_IMAGE_EXT,
     ALLOWED_MEDIA_EXT,
 )
+from .routes_us_market import router as _us_market_router
 
 router = APIRouter(prefix="/api")
+router.include_router(_us_market_router)
 _api_log = logging.getLogger("meiguwang.api")
 
 

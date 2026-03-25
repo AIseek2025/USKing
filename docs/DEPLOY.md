@@ -57,6 +57,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 - **Stripe**：会员支付需配置 `STRIPE_*` 与 Webhook。
 - **SMTP**：邮件验证码需配置 `SMTP_*`。
 - **OpenAI**：AI 客服需 `OPENAI_API_KEY`。
+- **美股数据面板**：`FRED_API_KEY` 可选（不填则使用 FRED 官网公开 CSV 降级）；`NEWSAPI_KEY`、`NEWS_RSS_URLS` 可选；未配置 NewsAPI 与自定义 RSS 时，默认拉取 **SEC 新闻稿官方 RSS**（可用 `NEWS_RSS_DISABLE_BUILTIN=1` 关闭）。访问 SEC 时请设置 `SEC_HTTP_USER_AGENT` 为含**真实联系邮箱**的字符串（**勿**在 UA 中写 `https://`，否则易被 SEC 返回 403）。
+- **公司投研频道**：`FINNHUB_API_KEY`、`ALPHA_VANTAGE_API_KEY` 均为各平台**免费注册**所得（有调用频率/日限额）；不配置时页面仅展示注册说明与 SEC 披露列表。
 
 ## 7. 合规与安全
 
