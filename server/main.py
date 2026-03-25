@@ -13,7 +13,7 @@ from starlette.responses import Response
 import logging
 import os
 
-from .config import DEV_MODE, assert_production_config
+from .config import DEV_MODE, assert_production_config, UPLOAD_DIR
 
 from .database import engine, Base
 from .models import User, Album, AlbumVideo, SiteSetting, Bookmark, MediaItem, Like, Follow, Comment, Conversation, DirectMessage
@@ -75,6 +75,8 @@ except Exception:
 app = FastAPI(title="美股王交易直播平台")
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+# 上传写入 UPLOAD_DIR（生产常为 /data/uploads），与整站 StaticFiles(/app/static) 可能不一致；须先挂载 /static/uploads 指向实际目录，否则头像/动态图片 404
+app.mount("/static/uploads", StaticFiles(directory=UPLOAD_DIR), name="static_uploads")
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 # Serve the live.html capture page
 app.mount("/app", StaticFiles(directory=os.path.join(BASE_DIR, "app"), html=True), name="app_static")
@@ -235,15 +237,15 @@ _seed_albums()
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html")
 
 @app.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request})
+    return templates.TemplateResponse(request, "register.html")
 
 @app.get("/u/{username}", response_class=HTMLResponse)
 async def user_profile_page(request: Request, username: str):
@@ -255,45 +257,45 @@ async def watch_live(request: Request, username: str):
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+    return templates.TemplateResponse(request, "dashboard.html")
 
 @app.get("/membership", response_class=HTMLResponse)
 async def membership_page(request: Request):
-    return templates.TemplateResponse("membership.html", {"request": request})
+    return templates.TemplateResponse(request, "membership.html")
 
 @app.get("/about", response_class=HTMLResponse)
 async def about_page(request: Request):
-    return templates.TemplateResponse("about.html", {"request": request})
+    return templates.TemplateResponse(request, "about.html")
 
 @app.get("/software", response_class=HTMLResponse)
 async def software_page(request: Request):
-    return templates.TemplateResponse("software.html", {"request": request})
+    return templates.TemplateResponse(request, "software.html")
 
 @app.get("/courses", response_class=HTMLResponse)
 async def courses_page(request: Request):
-    return templates.TemplateResponse("courses.html", {"request": request})
+    return templates.TemplateResponse(request, "courses.html")
 
 @app.get("/explore", response_class=HTMLResponse)
 async def explore_page(request: Request):
-    return templates.TemplateResponse("explore.html", {"request": request})
+    return templates.TemplateResponse(request, "explore.html")
 
 @app.get("/search", response_class=HTMLResponse)
 async def search_page(request: Request):
-    return templates.TemplateResponse("search.html", {"request": request})
+    return templates.TemplateResponse(request, "search.html")
 
 # Partial content routes for SPA panels
 @app.get("/partial/about", response_class=HTMLResponse)
 async def partial_about(request: Request):
-    return templates.TemplateResponse("partials/about_content.html", {"request": request})
+    return templates.TemplateResponse(request, "partials/about_content.html")
 
 @app.get("/partial/member", response_class=HTMLResponse)
 async def partial_member(request: Request):
-    return templates.TemplateResponse("partials/member_content.html", {"request": request})
+    return templates.TemplateResponse(request, "partials/member_content.html")
 
 @app.get("/partial/software", response_class=HTMLResponse)
 async def partial_software(request: Request):
-    return templates.TemplateResponse("partials/software_content.html", {"request": request})
+    return templates.TemplateResponse(request, "partials/software_content.html")
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request})
+    return templates.TemplateResponse(request, "admin.html")
