@@ -1,0 +1,20 @@
+# 生产示例：cp .env.example .env 并填写密钥后执行
+# docker compose -f docker-compose.prod.yml up -d --build
+
+services:
+  web:
+    build: .
+    image: usking-web:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DEV_MODE: "false"
+      DATABASE_URL: sqlite:////data/meiguwang.db
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - usking-data:/data
+
+volumes:
+  usking-data:

@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+python-jose[cryptography]
+python-multipart
+aiosmtplib
+jinja2
+stripe
+httpx
+pydantic[email]

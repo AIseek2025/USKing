@@ -1,0 +1,15 @@
+.venv
+venv
+__pycache__
+.git
+.env
+.env.*
+*.db
+*.sqlite
+static/uploads/*
+!static/uploads/.gitkeep
+.DS_Store
+.idea
+.vscode
+*.md
+!README.md

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}搜索 — 美股王{% endblock %}
+{% block content %}
+<script>
+(function(){
+  const q = new URLSearchParams(location.search).get('q') || '';
+  location.replace('/#search' + (q ? '?q=' + encodeURIComponent(q) : ''));
+})();
+</script>
+{% endblock %}

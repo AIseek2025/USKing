@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}个人主页 — 美股王{% endblock %}
+{% block head %}
+<style>
+.my-tab-btn{display:flex;align-items:center;gap:6px;padding:10px 20px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text3);cursor:pointer;font-size:14px;font-weight:500;transition:all .2s}
+.my-tab-btn:hover{color:var(--text)}
+.my-tab-btn.active{color:var(--white);border-bottom-color:var(--accent)}
+.my-tab-btn.active svg{stroke:var(--accent)}
+</style>
+{% endblock %}
+{% block content %}
+<div class="app-layout">
+  <div class="app-sidebar" id="appSidebar">
+    <a href="/" class="sb-item" data-panel="explore">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+      <span>推荐</span>
+    </a>
+    <a href="/" class="sb-item" data-panel="live">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4" fill="var(--accent)" stroke="var(--accent)"/><path d="M4.93 4.93a10 10 0 000 14.14"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
+      <span>直播</span>
+    </a>
+    <a href="/" class="sb-item" data-panel="courses">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      <span>课程</span>
+    </a>
+    <div class="sb-sep"></div>
+    <a href="javascript:void(0)" class="sb-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>个人主页</span>
+    </a>
+  </div>
+  <div class="app-main" style="background:var(--bg);overflow-y:auto">
+    <div id="profHero" style="position:relative;overflow:hidden">
+      <div id="profCover" style="position:absolute;inset:0;background:linear-gradient(135deg,#1a1c2e 0%,#252736 50%,#1e2030 100%);background-size:cover;background-position:center;min-height:100%"></div>
+      <div id="profHeroScrim" style="position:absolute;inset:0;pointer-events:none;z-index:1;background:linear-gradient(to top, rgba(8,10,18,.94) 0%, rgba(8,10,18,.62) 38%, rgba(8,10,18,.22) 68%, transparent 100%)"></div>
+      <div id="profCoverLabelSlot" style="position:absolute;top:10px;right:16px;z-index:6"></div>
+      <div id="profHeader" style="position:relative;z-index:2;padding:36px 24px 16px"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:0;padding:20px 24px 0" id="profTabs">
+      <button class="my-tab-btn active" onclick="showTab('posts',this)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>作品</span></button>
+      <button class="my-tab-btn" onclick="showTab('bookmarks',this)" id="bookmarkTab" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg><span>收藏</span></button>
+      <button class="my-tab-btn" onclick="showTab('edit',this)" id="editTab" style="display:none;margin-left:auto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg><span>编辑</span></button>
+    </div>
+    <div id="tabPosts" style="padding:12px 24px 24px"></div>
+    <div id="tabBookmarks" style="display:none;padding:12px 24px 24px"></div>
+    <div id="tabEdit" style="display:none;padding:12px 24px 24px"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="profilePublishModal" style="display:none" onclick="if(event.target===this)closeProfilePublish()">
+  <div class="modal-box" style="max-width:520px;width:90%">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h3 style="font-size:16px">发布动态</h3>
+      <button onclick="closeProfilePublish()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">&times;</button>
+    </div>
+    <textarea class="form-input" id="profPublishContent" rows="4" placeholder="分享你的交易心得、市场观点..." style="resize:vertical;margin-bottom:12px"></textarea>
+    <div id="profPublishPreview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <label class="btn btn-ghost btn-sm" style="cursor:pointer">📷 图片/视频<input type="file" id="profMediaInput" accept="image/*,video/*" multiple style="display:none" onchange="handleProfMedia(this)"></label>
+      <div style="flex:1"></div>
+      <button class="btn btn-primary" onclick="submitProfilePost()" id="profSubmitBtn">发布</button>
+    </div>
+    <div id="profPublishErr" class="error-msg" style="display:none;margin-top:8px"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const targetUser='{{username}}';
+let profileData=null, isOwner=false, profMediaFiles=[];
+
+let socialData={followers:0,following:0,is_following:false};
+async function loadProfile(){
+  const [r, sc]=await Promise.all([
+    APP.api('GET',`/api/user/${targetUser}`),
+    APP.api('GET',`/api/user/${targetUser}/social`)
+  ]);
+  profileData=r.user; socialData=sc;
+  isOwner=APP.user&&APP.user.id===profileData.id;
+  if(isOwner){document.getElementById('editTab').style.display='';document.getElementById('bookmarkTab').style.display=''}
+  renderHeader(); loadPosts(); if(isOwner)renderEditForm();
+}
+
+function renderHeader(){
+  const u=profileData;
+  const av=u.avatar_url?`<img src=${JSON.stringify(String(u.avatar_url))} style="width:100%;height:100%;object-fit:cover">`:`<span style="color:var(--accent);font-size:34px;font-weight:700">${(u.display_name||u.username)[0].toUpperCase()}</span>`;
+  const gLabel={'male':'男','female':'女','other':'其他'}[u.gender]||'';
+  const coverEl=document.getElementById('profCover');
+  const coverRaw=u.cover_url && String(u.cover_url).trim();
+  if(coverRaw){
+    const cu=coverRaw.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    coverEl.style.background='';
+    coverEl.style.backgroundImage="url('"+cu+"')";
+    coverEl.style.backgroundSize='cover';
+    coverEl.style.backgroundPosition='center';
+  }else{
+    coverEl.style.backgroundImage='';
+    coverEl.style.background='linear-gradient(135deg,#1a1c2e 0%,#252736 50%,#1e2030 100%)';
+    coverEl.style.backgroundSize='cover';
+    coverEl.style.backgroundPosition='center';
+  }
+  const labelSlot=document.getElementById('profCoverLabelSlot');
+  if(labelSlot){labelSlot.innerHTML=isOwner?`<label style="cursor:pointer;padding:4px 12px;background:rgba(0,0,0,.5);color:#fff;border-radius:4px;font-size:11px;backdrop-filter:blur(4px);display:inline-block">更换封面<input type="file" accept="image/*" style="display:none" onchange="uploadCover2(this)"></label>`:''}
+  const did=u.display_id?String(u.display_id).padStart(8,'0'):'';
+  document.getElementById('profHeader').innerHTML=`
+    <div style="display:flex;align-items:flex-end;gap:12px">
+      <div style="width:84px;height:84px;border-radius:50%;border:3px solid rgba(255,255,255,.35);background:var(--bg2);overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative;cursor:${isOwner?'pointer':'default'};box-shadow:0 4px 16px rgba(0,0,0,.35)" ${isOwner?`onclick="document.getElementById('_avInput2').click()"`:''}>
+        ${av}
+        ${isOwner?`<div style="position:absolute;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;border-radius:50%" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0"><span style="color:#fff;font-size:10px">更换</span></div><input type="file" id="_avInput2" accept="image/*" style="display:none" onchange="uploadAvatar2(this)">`:''}
+      </div>
+      <div style="flex:1;min-width:0;padding-bottom:2px">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:21px;font-weight:800;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.5)">${u.display_name||u.username}</span>${u.is_member?'<span class="badge badge-yellow" style="font-size:10px;vertical-align:middle">会员</span>':''}${isOwner?`<button onclick="showTab('edit',document.getElementById('editTab'))" style="background:rgba(0,0,0,.25);border:none;border-radius:6px;cursor:pointer;color:rgba(255,255,255,.85);padding:4px;display:flex;align-items:center" title="编辑资料"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg></button>`:''}</div>
+        <div style="font-size:12px;color:rgba(255,255,255,.82);margin-top:3px;text-shadow:0 1px 4px rgba(0,0,0,.45)">@${u.username}${did?' · ID:'+did:''}${gLabel?' · '+gLabel:''}${u.birthday?' · 🎂'+u.birthday:''}</div>
+        <div style="display:flex;gap:16px;margin-top:5px;font-size:13px">
+          <span><strong style="color:#fff">${socialData.following||0}</strong> <span style="color:rgba(255,255,255,.7);font-size:11px">关注</span></span>
+          <span><strong style="color:#fff">${socialData.followers||0}</strong> <span style="color:rgba(255,255,255,.7);font-size:11px">粉丝</span></span>
+        </div>
+      </div>
+      ${isOwner?`<button class="btn btn-primary btn-sm" onclick="openProfilePublish()" style="margin-bottom:2px;flex-shrink:0">+ 投稿</button>`:`<button class="btn btn-sm" id="profFollowBtn" onclick="toggleProfileFollow()" style="margin-bottom:2px;flex-shrink:0;${socialData.is_following?'background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.25)':'background:var(--accent);color:#000'}">${socialData.is_following?'已关注':'关注'}</button>`}
+    </div>
+    ${u.bio?`<div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,.92);line-height:1.5;text-shadow:0 1px 6px rgba(0,0,0,.55)">${u.bio}</div>`:''}
+    <div style="display:flex;flex-wrap:wrap;gap:12px 20px;margin-top:6px;font-size:11px;color:rgba(255,255,255,.65)">
+      ${u.location?`<span>📍 ${u.location}</span>`:''}
+      <span>加入于 ${new Date(u.created_at).toLocaleDateString('zh-CN')}</span>
+    </div>`;
+}
+
+function _pgrid(posts,el,emptyMsg){
+  if(!posts||!posts.length){el.innerHTML=`<div class="empty-state"><p>${emptyMsg}</p></div>`;return}
+  if(window.PostMoment) PostMoment.mergePosts(posts);
+  const esc=window.PostMoment&&PostMoment.escHtml?PostMoment.escHtml.bind(PostMoment):function(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')};
+  const escA=window.PostMoment&&PostMoment.escAttr?PostMoment.escAttr.bind(PostMoment):esc;
+  let h='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px 8px">';
+  posts.forEach(p=>{
+    const n=(p.media_urls&&p.media_urls.length)||0;
+    const media=n?p.media_urls[0]:null;
+    const isVid=media&&/\.(mp4|mov|webm)$/i.test(media);
+    const multi=n>1?`<span style="position:absolute;top:6px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:1">${n}</span>`:'';
+    const capRaw=(p.content||'').trim().replace(/\s+/g,' ');
+    const capHtml=capRaw?esc(capRaw):'<span style="color:var(--text3)">（无标题）</span>';
+    const capTitle=capRaw?escA(capRaw):'';
+    const canDel=APP.user&&p.author&&APP.user.id===p.author.id;
+    const trashSvg='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+    const trashBtn=canDel?`<button type="button" onclick="PostMoment.deleteWholePost(${p.id},event)" title="删除作品" aria-label="删除作品" style="position:absolute;top:6px;left:6px;z-index:3;width:30px;height:30px;border-radius:50%;border:none;background:rgba(0,0,0,.52);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;backdrop-filter:blur(6px);box-shadow:0 1px 4px rgba(0,0,0,.35)">${trashSvg}</button>`:'';
+    h+=`<div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+      <div style="aspect-ratio:3/4;background:var(--bg3);border-radius:4px;overflow:hidden;cursor:pointer;position:relative" onclick="PostMoment.open(${p.id})" role="button">
+      ${trashBtn}
+      ${multi}
+      ${media?(isVid?`<video src="${media}" preload="metadata" muted playsinline style="width:100%;height:100%;object-fit:cover;pointer-events:none"></video>`:`<img src="${media}" loading="lazy" style="width:100%;height:100%;object-fit:cover;pointer-events:none">`):`<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;padding:8px;font-size:11px;color:var(--text3);pointer-events:none">${(p.content||'').substring(0,50)}</div>`}
+      <div style="position:absolute;bottom:4px;left:6px;font-size:10px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);display:flex;align-items:center;gap:3px;pointer-events:none">▶ ${p.view_count||0}</div>
+      </div>
+      <div style="font-size:12px;line-height:1.35;color:var(--text);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word;min-height:2.6em" title="${capTitle}">${capHtml}</div>
+    </div>`;
+  });
+  el.innerHTML=h+'</div>';
+}
+
+async function loadPosts(){
+  const r=await APP.api('GET',`/api/posts/user/${targetUser}`);
+  _pgrid(r.posts,document.getElementById('tabPosts'),isOwner?'还没有作品，去发布第一条吧':'暂无动态');
+}
+
+async function loadBookmarks(){
+  try{
+    const r=await APP.api('GET','/api/posts/bookmarks');
+    _pgrid(r.posts,document.getElementById('tabBookmarks'),'还没有收藏');
+  }catch{document.getElementById('tabBookmarks').innerHTML=`<div class="empty-state"><p>加载失败</p></div>`}
+}
+
+function renderEditForm(){
+  const u=profileData;
+  document.getElementById('tabEdit').innerHTML=`
+    <div class="card" style="max-width:560px;margin-top:8px">
+      <div class="form-group"><label>昵称</label><input class="form-input" id="eName" value="${u.display_name||''}"></div>
+      <div class="form-group"><label>简介</label><textarea class="form-input" id="eBio" rows="3">${u.bio||''}</textarea></div>
+      <div style="display:flex;gap:12px">
+        <div class="form-group" style="flex:1"><label>性别</label><select class="form-input" id="eGender"><option value="">未设置</option><option value="male"${u.gender==='male'?' selected':''}>男</option><option value="female"${u.gender==='female'?' selected':''}>女</option><option value="other"${u.gender==='other'?' selected':''}>其他</option></select></div>
+        <div class="form-group" style="flex:1"><label>出生日期</label><input class="form-input" id="eBirthday" type="date" value="${u.birthday||''}"></div>
+      </div>
+      <div class="form-group"><label>所在地</label><input class="form-input" id="eLoc" value="${u.location||''}"></div>
+      <div class="form-group"><label>个人网站</label><input class="form-input" id="eWeb" value="${u.website||''}"></div>
+      <div id="editMsg" class="success-msg" style="display:none"></div>
+      <button class="btn btn-primary" onclick="saveProfile()">保存</button>
+    </div>`;
+}
+
+async function saveProfile(){
+  await APP.api('PUT','/api/user/profile',{display_name:document.getElementById('eName').value,bio:document.getElementById('eBio').value,gender:document.getElementById('eGender').value,birthday:document.getElementById('eBirthday').value,location:document.getElementById('eLoc').value,website:document.getElementById('eWeb').value});
+  const msg=document.getElementById('editMsg');msg.textContent='保存成功';msg.style.display='block';setTimeout(()=>{msg.style.display='none'},2000);loadProfile();
+}
+async function uploadAvatar2(el){const f=el.files[0];if(!f)return;try{const fd=new FormData();fd.append('file',f);await APP.api('POST','/api/user/avatar',fd);el.value='';loadProfile();await APP.init()}catch(e){alert(e.message||'头像上传失败')}}
+async function uploadCover2(el){const f=el.files[0];if(!f)return;try{const fd=new FormData();fd.append('file',f);await APP.api('POST','/api/user/cover',fd);el.value='';await loadProfile();await APP.init()}catch(e){alert(e.message||'封面上传失败')}}
+async function toggleProfileFollow(){
+  if(!APP.user){location.href='/login';return}
+  if(!profileData) return;
+  try{
+    const r=await APP.api('POST',`/api/user/${profileData.id}/follow`);
+    socialData.is_following=r.following;
+    socialData.followers+=(r.following?1:-1);
+    renderHeader();
+  }catch{}
+}
+
+function showTab(name,el){
+  document.querySelectorAll('#profTabs .my-tab-btn').forEach(t=>t.classList.remove('active'));
+  if(el)el.classList.add('active');
+  document.getElementById('tabPosts').style.display=name==='posts'?'':'none';
+  document.getElementById('tabBookmarks').style.display=name==='bookmarks'?'':'none';
+  document.getElementById('tabEdit').style.display=name==='edit'?'':'none';
+  if(name==='bookmarks')loadBookmarks();
+}
+
+function openProfilePublish(){profMediaFiles=[];document.getElementById('profPublishContent').value='';document.getElementById('profPublishPreview').innerHTML='';document.getElementById('profPublishErr').style.display='none';document.getElementById('profilePublishModal').style.display='flex'}
+function closeProfilePublish(){document.getElementById('profilePublishModal').style.display='none'}
+function handleProfMedia(input){
+  const preview=document.getElementById('profPublishPreview');
+  for(const f of input.files){profMediaFiles.push(f);const reader=new FileReader();reader.onload=e=>{const el=f.type.startsWith('video')?`<div style="width:72px;height:72px;border-radius:6px;overflow:hidden;flex-shrink:0;background:#000"><video src="${e.target.result}" style="width:100%;height:100%;object-fit:cover"></video></div>`:`<div style="width:72px;height:72px;border-radius:6px;overflow:hidden;flex-shrink:0"><img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover"></div>`;preview.insertAdjacentHTML('beforeend',el)};reader.readAsDataURL(f)}
+  input.value='';
+}
+async function submitProfilePost(){
+  const content=document.getElementById('profPublishContent').value.trim();const errEl=document.getElementById('profPublishErr');
+  if(!content&&!profMediaFiles.length){errEl.textContent='请输入内容或上传媒体';errEl.style.display='block';return}
+  errEl.style.display='none';const btn=document.getElementById('profSubmitBtn');btn.disabled=true;btn.textContent='发布中...';
+  const urls=[];for(const f of profMediaFiles){const fd=new FormData();fd.append('file',f);const r=await APP.api('POST','/api/upload',fd);urls.push(r.url)}
+  await APP.api('POST','/api/posts',{content:content||'',media_urls:urls});btn.disabled=false;btn.textContent='发布';closeProfilePublish();loadPosts();
+}
+
+loadProfile();
+</script>
+{% endblock %}

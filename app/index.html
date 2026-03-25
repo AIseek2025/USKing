@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>美股王 · 交易直播平台</title>
+<link rel="icon" href="/static/nav-logo-mark.svg?v=1" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/nav-logo-mark.svg?v=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0e17;--surface:#111827;--surface2:#1a2332;--border:#1e293b;
+  --accent:#f59e0b;--accent2:#eab308;--green:#22c55e;--red:#ef4444;--blue:#3b82f6;
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --radius:12px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none}
+
+/* Top Bar */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.topbar .logo{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700;color:var(--accent)}
+.topbar .logo svg{width:28px;height:28px}
+.topbar .status-bar{display:flex;align-items:center;gap:16px;font-size:13px;color:var(--text2)}
+.topbar .status-bar .live-indicator{display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:20px;font-weight:600;font-size:12px}
+.topbar .status-bar .live-indicator.offline{background:rgba(100,116,139,.2);color:var(--text3)}
+.topbar .status-bar .live-indicator.live{background:rgba(239,68,68,.15);color:var(--red);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
+.topbar .status-bar .live-indicator .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+.user-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#f97316);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#000;cursor:pointer}
+
+/* Layout */
+.main-layout{display:grid;grid-template-columns:1fr 340px;grid-template-rows:1fr;height:calc(100vh - 57px)}
+
+/* Preview Area */
+.preview-area{padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto}
+.preview-area h2{font-size:14px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:1px}
+
+.preview-main{flex:1;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;position:relative;min-height:400px}
+.preview-main .preview-label{position:absolute;top:12px;left:12px;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);padding:4px 10px;border-radius:6px;font-size:11px;color:var(--text2);z-index:2}
+
+.preview-grid{display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr;height:100%;gap:2px;background:var(--border)}
+.preview-cell{background:var(--surface2);position:relative;overflow:hidden;display:flex;flex-direction:column}
+.preview-cell .cell-header{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(0,0,0,.3);font-size:11px;color:var(--text2);flex-shrink:0}
+.preview-cell .cell-header .cell-tag{padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600}
+.preview-cell .cell-header .cell-tag.mgw{background:rgba(245,158,11,.15);color:var(--accent)}
+.preview-cell .cell-header .cell-tag.ib{background:rgba(59,130,246,.15);color:var(--blue)}
+.cell-body{flex:1;padding:8px;display:flex;flex-direction:column;gap:4px;overflow:hidden}
+
+/* Fake chart */
+.fake-chart{flex:1;position:relative;border-radius:6px;overflow:hidden;background:#0d1520}
+.fake-chart canvas{width:100%;height:100%}
+.chart-overlay{position:absolute;top:6px;left:8px;font-size:10px;display:flex;flex-direction:column;gap:2px}
+.chart-overlay .ticker{font-weight:700;font-size:13px;color:#fff}
+.chart-overlay .price{color:var(--green);font-weight:600;font-size:12px}
+.chart-overlay .price.down{color:var(--red)}
+
+/* IB Panel */
+.ib-panel{padding:8px;font-size:11px}
+.ib-panel table{width:100%;border-collapse:collapse}
+.ib-panel th{text-align:left;color:var(--text3);font-weight:500;padding:3px 4px;border-bottom:1px solid var(--border)}
+.ib-panel td{padding:3px 4px;color:var(--text2)}
+.ib-panel td.pos{color:var(--green)}
+.ib-panel td.neg{color:var(--red)}
+.ib-account{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);margin-bottom:6px}
+.ib-account span:first-child{color:var(--text3)}
+.ib-account span:last-child{color:var(--text);font-weight:600}
+
+/* Right Panel */
+.right-panel{background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+.panel-section{padding:16px;border-bottom:1px solid var(--border)}
+.panel-section h3{font-size:13px;color:var(--text2);font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+
+/* Source list */
+.source-list{display:flex;flex-direction:column;gap:8px}
+.source-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);cursor:pointer;transition:all .15s}
+.source-item:hover{border-color:var(--accent);background:rgba(245,158,11,.05)}
+.source-item.active{border-color:var(--accent);background:rgba(245,158,11,.08)}
+.source-icon{width:32px;height:32px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.source-icon.mgw{background:rgba(245,158,11,.15);color:var(--accent)}
+.source-icon.ib{background:rgba(59,130,246,.15);color:var(--blue)}
+.source-info{flex:1;min-width:0}
+.source-info .name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.source-info .desc{font-size:11px;color:var(--text3);margin-top:1px}
+.source-toggle{position:relative;width:36px;height:20px;border-radius:10px;background:var(--border);cursor:pointer;transition:all .2s;flex-shrink:0}
+.source-toggle.on{background:var(--accent)}
+.source-toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:all .2s}
+.source-toggle.on::after{left:18px}
+
+/* Platform list */
+.platform-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);margin-bottom:8px}
+.platform-item .p-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.platform-item .p-info{flex:1;min-width:0}
+.platform-item .p-info .p-name{font-size:12px;font-weight:600;color:var(--text)}
+.platform-item .p-info .p-status{font-size:10px;margin-top:1px}
+.platform-item .p-info .p-status.ready{color:var(--green)}
+.platform-item .p-info .p-status.idle{color:var(--text3)}
+.platform-item .p-info .p-status.streaming{color:var(--red);font-weight:600}
+.p-icon.yt{background:rgba(239,68,68,.12);color:#f00}
+.p-icon.tt{background:rgba(255,255,255,.08);color:#fff}
+.p-icon.tw{background:rgba(145,70,255,.12);color:#9146ff}
+.p-icon.bl{background:rgba(0,174,236,.12);color:#00aeec}
+.p-icon.custom{background:rgba(100,116,139,.12);color:var(--text3)}
+
+.add-platform{display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;border-radius:8px;border:1px dashed var(--border);color:var(--text3);font-size:12px;cursor:pointer;transition:all .15s}
+.add-platform:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Settings */
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0}
+.setting-row label{font-size:12px;color:var(--text2)}
+.setting-row select,.setting-row input[type=text]{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;outline:none}
+.setting-row select:focus,.setting-row input:focus{border-color:var(--accent)}
+
+/* Go Live */
+.go-live-section{padding:16px;margin-top:auto;border-top:1px solid var(--border)}
+.btn-live{width:100%;padding:14px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s}
+.btn-live.start{background:linear-gradient(135deg,var(--red),#dc2626);color:#fff;box-shadow:0 4px 20px rgba(239,68,68,.3)}
+.btn-live.start:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(239,68,68,.4)}
+.btn-live.stop{background:var(--surface2);border:1px solid var(--border);color:var(--text2)}
+.btn-live.stop:hover{border-color:var(--red);color:var(--red)}
+
+.stats-row{display:flex;gap:12px;margin-bottom:12px}
+.stat-card{flex:1;background:var(--surface2);border-radius:8px;padding:8px 10px;text-align:center}
+.stat-card .stat-val{font-size:16px;font-weight:700;color:var(--text)}
+.stat-card .stat-label{font-size:10px;color:var(--text3);margin-top:2px}
+
+/* Layout selector */
+.layout-options{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:4px}
+.layout-opt{aspect-ratio:16/10;border:1px solid var(--border);border-radius:6px;cursor:pointer;padding:4px;display:flex;flex-wrap:wrap;gap:2px;transition:all .15s;background:var(--surface2)}
+.layout-opt:hover{border-color:var(--text3)}
+.layout-opt.active{border-color:var(--accent);background:rgba(245,158,11,.05)}
+.layout-opt .l-cell{background:var(--border);border-radius:2px}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+
+/* Bottom ticker */
+.bottom-ticker{position:fixed;bottom:0;left:0;right:340px;height:28px;background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;overflow:hidden;z-index:50}
+.ticker-track{display:flex;align-items:center;gap:24px;animation:scroll 30s linear infinite;white-space:nowrap;padding:0 12px}
+@keyframes scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.ticker-item{font-size:11px;display:flex;align-items:center;gap:6px;color:var(--text2)}
+.ticker-item .t-symbol{font-weight:600;color:var(--text)}
+.ticker-item .t-up{color:var(--green)}
+.ticker-item .t-down{color:var(--red)}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;width:420px;max-width:90vw;padding:24px}
+.modal h3{font-size:16px;margin-bottom:16px;color:var(--text)}
+.modal .form-group{margin-bottom:14px}
+.modal .form-group label{display:block;font-size:12px;color:var(--text2);margin-bottom:6px}
+.modal .form-group select,.modal .form-group input{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;outline:none}
+.modal .form-group select:focus,.modal .form-group input:focus{border-color:var(--accent)}
+.modal-actions{display:flex;gap:10px;margin-top:20px}
+.modal-actions button{flex:1;padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+.modal-actions .btn-cancel{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.modal-actions .btn-confirm{background:var(--accent);color:#000}
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="logo">
+    <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="6" fill="#f59e0b"/><path d="M7 18l4-6 3 3 4-5 3 4" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="9" r="2" fill="#000"/></svg>
+    美股王 · 交易直播
+  </div>
+  <div class="status-bar">
+    <div class="live-indicator offline" id="liveIndicator">
+      <span class="dot"></span>
+      <span id="liveText">未开播</span>
+    </div>
+    <span id="timerDisplay" style="font-variant-numeric:tabular-nums">00:00:00</span>
+    <div class="user-avatar">W</div>
+  </div>
+</div>
+
+<!-- Main Layout -->
+<div class="main-layout">
+  <!-- Preview -->
+  <div class="preview-area">
+    <h2>直播预览</h2>
+    <div class="preview-main">
+      <div class="preview-label">合成画面预览 · 多屏行情</div>
+      <div class="preview-grid" id="previewGrid">
+        <!-- Cell 1: MGW Chart 1 -->
+        <div class="preview-cell">
+          <div class="cell-header"><span>美股王 · 主图</span><span class="cell-tag mgw">MGW</span></div>
+          <div class="cell-body">
+            <div class="fake-chart" id="chart1">
+              <canvas></canvas>
+              <div class="chart-overlay">
+                <span class="ticker">NVDA</span>
+                <span class="price" id="price1">$138.42 +2.67%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Cell 2: IB -->
+        <div class="preview-cell" style="grid-row:1/3">
+          <div class="cell-header"><span>盈透证券 · 交易</span><span class="cell-tag ib">IB</span></div>
+          <div class="cell-body">
+            <div class="ib-panel">
+              <div class="ib-account"><span>净清算价值</span><span>$596,208.00</span></div>
+              <div class="ib-account"><span>今日盈亏</span><span style="color:var(--green)">+$15,842.30</span></div>
+              <table>
+                <tr><th>代码</th><th>持仓</th><th>盈亏%</th></tr>
+                <tr><td>MSTR</td><td>161</td><td class="pos">+46.87%</td></tr>
+                <tr><td>CRWV</td><td>—</td><td class="pos">+43.56%</td></tr>
+                <tr><td>ORCL</td><td>—</td><td class="pos">+36.86%</td></tr>
+                <tr><td>COIN</td><td>—</td><td class="pos">+32.69%</td></tr>
+                <tr><td>CRCL</td><td>83.75</td><td class="pos">+15.33%</td></tr>
+                <tr><td>UNH</td><td>—</td><td class="pos">+27.67%</td></tr>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- Cell 3: MGW Chart 2 -->
+        <div class="preview-cell">
+          <div class="cell-header"><span>美股王 · 副图</span><span class="cell-tag mgw">MGW</span></div>
+          <div class="cell-body">
+            <div class="fake-chart" id="chart2">
+              <canvas></canvas>
+              <div class="chart-overlay">
+                <span class="ticker">MSTR</span>
+                <span class="price" id="price2">$366.80 +5.12%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="right-panel">
+    <!-- Sources -->
+    <div class="panel-section">
+      <h3>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        采集窗口
+      </h3>
+      <div class="source-list">
+        <div class="source-item active">
+          <div class="source-icon mgw">📈</div>
+          <div class="source-info"><div class="name">美股王 · 主图窗口</div><div class="desc">NVDA 分时 + K线</div></div>
+          <div class="source-toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="source-item active">
+          <div class="source-icon mgw">📊</div>
+          <div class="source-info"><div class="name">美股王 · 副图窗口</div><div class="desc">MSTR 波段分析</div></div>
+          <div class="source-toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="source-item active">
+          <div class="source-icon mgw">📋</div>
+          <div class="source-info"><div class="name">美股王 · 自选股列表</div><div class="desc">实时报价面板</div></div>
+          <div class="source-toggle" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="source-item active">
+          <div class="source-icon ib">💹</div>
+          <div class="source-info"><div class="name">盈透证券 TWS</div><div class="desc">持仓 / 下单界面</div></div>
+          <div class="source-toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Layout -->
+    <div class="panel-section">
+      <h3>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        布局选择
+      </h3>
+      <div class="layout-options">
+        <div class="layout-opt" onclick="selectLayout(this)" title="左右分屏">
+          <div class="l-cell" style="width:60%;height:100%"></div>
+          <div class="l-cell" style="width:calc(40% - 2px);height:100%"></div>
+        </div>
+        <div class="layout-opt active" onclick="selectLayout(this)" title="2+1 网格（当前）">
+          <div class="l-cell" style="width:60%;height:calc(50% - 1px)"></div>
+          <div class="l-cell" style="width:calc(40% - 2px);height:100%"></div>
+          <div class="l-cell" style="width:60%;height:calc(50% - 1px)"></div>
+        </div>
+        <div class="layout-opt" onclick="selectLayout(this)" title="四宫格">
+          <div class="l-cell" style="width:calc(50% - 1px);height:calc(50% - 1px)"></div>
+          <div class="l-cell" style="width:calc(50% - 1px);height:calc(50% - 1px)"></div>
+          <div class="l-cell" style="width:calc(50% - 1px);height:calc(50% - 1px)"></div>
+          <div class="l-cell" style="width:calc(50% - 1px);height:calc(50% - 1px)"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Multi-platform -->
+    <div class="panel-section">
+      <h3>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+        多平台推流
+      </h3>
+      <div id="platformList">
+        <div class="platform-item">
+          <div class="p-icon yt">▶</div>
+          <div class="p-info"><div class="p-name">YouTube Live</div><div class="p-status ready">✓ 已配置 Stream Key</div></div>
+          <div class="source-toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="platform-item">
+          <div class="p-icon tt">♪</div>
+          <div class="p-info"><div class="p-name">TikTok Live</div><div class="p-status ready">✓ 已配置 Stream Key</div></div>
+          <div class="source-toggle on" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="platform-item">
+          <div class="p-icon bl">B</div>
+          <div class="p-info"><div class="p-name">Bilibili 直播</div><div class="p-status idle">未配置</div></div>
+          <div class="source-toggle" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="platform-item">
+          <div class="p-icon tw">T</div>
+          <div class="p-info"><div class="p-name">Twitch</div><div class="p-status idle">未配置</div></div>
+          <div class="source-toggle" onclick="this.classList.toggle('on')"></div>
+        </div>
+      </div>
+      <div class="add-platform" onclick="document.getElementById('addModal').classList.add('show')">+ 添加推流平台</div>
+    </div>
+
+    <!-- Settings -->
+    <div class="panel-section">
+      <h3>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        推流设置
+      </h3>
+      <div class="setting-row"><label>分辨率</label><select><option>1920×1080</option><option>2560×1440</option><option>1280×720</option></select></div>
+      <div class="setting-row"><label>帧率</label><select><option>30 fps</option><option>60 fps</option></select></div>
+      <div class="setting-row"><label>码率</label><select><option>4500 kbps</option><option>6000 kbps</option><option>8000 kbps</option><option>3000 kbps</option></select></div>
+      <div class="setting-row"><label>编码器</label><select><option>H.264 (x264)</option><option>H.264 (NVENC)</option><option>H.265 (HEVC)</option></select></div>
+    </div>
+
+    <!-- Go Live -->
+    <div class="go-live-section">
+      <div class="stats-row" id="statsRow" style="display:none">
+        <div class="stat-card"><div class="stat-val" id="statViewers">0</div><div class="stat-label">观看</div></div>
+        <div class="stat-card"><div class="stat-val" id="statBitrate">—</div><div class="stat-label">码率</div></div>
+        <div class="stat-card"><div class="stat-val" id="statDropped">0</div><div class="stat-label">丢帧</div></div>
+      </div>
+      <button class="btn-live start" id="btnLive" onclick="toggleLive()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+        开始直播
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Ticker -->
+<div class="bottom-ticker">
+  <div class="ticker-track" id="tickerTrack"></div>
+</div>
+
+<!-- Add Platform Modal -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h3>添加推流平台</h3>
+    <div class="form-group">
+      <label>平台</label>
+      <select id="modalPlatform">
+        <option value="youtube">YouTube Live</option>
+        <option value="tiktok">TikTok Live</option>
+        <option value="bilibili">Bilibili 直播</option>
+        <option value="twitch">Twitch</option>
+        <option value="custom">自定义 RTMP</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Stream Key / 推流密钥</label>
+      <input type="text" placeholder="填入平台提供的 Stream Key" id="modalKey">
+    </div>
+    <div class="form-group" id="customUrlGroup" style="display:none">
+      <label>RTMP 地址</label>
+      <input type="text" placeholder="rtmp://your-server/live" id="modalUrl">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="document.getElementById('addModal').classList.remove('show')">取消</button>
+      <button class="btn-confirm" onclick="addPlatform()">添加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let isLive = false;
+let timerInterval = null;
+let seconds = 0;
+
+function toggleLive() {
+  isLive = !isLive;
+  const btn = document.getElementById('btnLive');
+  const indicator = document.getElementById('liveIndicator');
+  const liveText = document.getElementById('liveText');
+  const stats = document.getElementById('statsRow');
+
+  if (isLive) {
+    btn.className = 'btn-live stop';
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg> 停止直播';
+    indicator.className = 'live-indicator live';
+    liveText.textContent = 'LIVE';
+    stats.style.display = 'flex';
+    seconds = 0;
+    timerInterval = setInterval(updateTimer, 1000);
+    updatePlatformStatus(true);
+    simulateStats();
+  } else {
+    btn.className = 'btn-live start';
+    btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg> 开始直播';
+    indicator.className = 'live-indicator offline';
+    liveText.textContent = '未开播';
+    stats.style.display = 'none';
+    clearInterval(timerInterval);
+    document.getElementById('timerDisplay').textContent = '00:00:00';
+    updatePlatformStatus(false);
+  }
+}
+
+function updateTimer() {
+  seconds++;
+  const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+  const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+  const s = String(seconds % 60).padStart(2, '0');
+  document.getElementById('timerDisplay').textContent = `${h}:${m}:${s}`;
+}
+
+function updatePlatformStatus(live) {
+  document.querySelectorAll('.platform-item').forEach(item => {
+    const toggle = item.querySelector('.source-toggle');
+    const status = item.querySelector('.p-status');
+    if (toggle && toggle.classList.contains('on') && status) {
+      if (live) {
+        status.className = 'p-status streaming';
+        status.textContent = '● 推流中';
+      } else {
+        status.className = 'p-status ready';
+        status.textContent = '✓ 已配置 Stream Key';
+      }
+    }
+  });
+}
+
+function simulateStats() {
+  if (!isLive) return;
+  const v = document.getElementById('statViewers');
+  const b = document.getElementById('statBitrate');
+  const d = document.getElementById('statDropped');
+  let viewers = 0;
+  const update = () => {
+    if (!isLive) return;
+    viewers += Math.floor(Math.random() * 3);
+    v.textContent = viewers;
+    b.textContent = (4200 + Math.floor(Math.random() * 600)) + '';
+    d.textContent = Math.floor(Math.random() * 2);
+    setTimeout(update, 2000 + Math.random() * 3000);
+  };
+  update();
+}
+
+function selectLayout(el) {
+  document.querySelectorAll('.layout-opt').forEach(o => o.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function addPlatform() {
+  document.getElementById('addModal').classList.remove('show');
+}
+
+document.getElementById('modalPlatform').addEventListener('change', function() {
+  document.getElementById('customUrlGroup').style.display = this.value === 'custom' ? '' : 'none';
+});
+
+// Fake charts
+function drawChart(canvasEl, color, seed) {
+  const ctx = canvasEl.getContext('2d');
+  const w = canvasEl.width = canvasEl.parentElement.clientWidth;
+  const h = canvasEl.height = canvasEl.parentElement.clientHeight;
+
+  let points = [];
+  let y = h * 0.5;
+  for (let x = 0; x < w; x += 2) {
+    y += (Math.random() - 0.48) * 3 + Math.sin(x * 0.02 + seed) * 0.5;
+    y = Math.max(h * 0.15, Math.min(h * 0.85, y));
+    points.push({ x, y });
+  }
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,.04)';
+  ctx.lineWidth = 1;
+  for (let gy = 0; gy < h; gy += h / 5) {
+    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+  }
+  for (let gx = 0; gx < w; gx += w / 8) {
+    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+  }
+
+  // MA lines
+  const drawMA = (offset, clr) => {
+    ctx.beginPath();
+    ctx.strokeStyle = clr;
+    ctx.lineWidth = 1;
+    points.forEach((p, i) => {
+      const py = p.y + Math.sin(i * 0.05) * offset;
+      i === 0 ? ctx.moveTo(p.x, py) : ctx.lineTo(p.x, py);
+    });
+    ctx.stroke();
+  };
+  drawMA(8, 'rgba(245,158,11,.3)');
+  drawMA(-6, 'rgba(59,130,246,.3)');
+
+  // Candlesticks
+  const barW = 4;
+  for (let i = 0; i < points.length; i += 4) {
+    const p = points[i];
+    const open = p.y + (Math.random() - 0.5) * 6;
+    const close = p.y + (Math.random() - 0.5) * 6;
+    const high = Math.min(open, close) - Math.random() * 4;
+    const low = Math.max(open, close) + Math.random() * 4;
+    const bull = close < open;
+    ctx.fillStyle = bull ? 'rgba(34,197,94,.8)' : 'rgba(239,68,68,.8)';
+    ctx.strokeStyle = ctx.fillStyle;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(p.x, high); ctx.lineTo(p.x, low); ctx.stroke();
+    ctx.fillRect(p.x - barW / 2, Math.min(open, close), barW, Math.abs(close - open) || 1);
+  }
+
+  // Volume bars
+  for (let i = 0; i < points.length; i += 4) {
+    const p = points[i];
+    const vol = Math.random() * h * 0.15;
+    const bull = Math.random() > 0.45;
+    ctx.fillStyle = bull ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)';
+    ctx.fillRect(p.x - barW / 2, h - vol, barW, vol);
+  }
+}
+
+function initCharts() {
+  document.querySelectorAll('.fake-chart').forEach((el, i) => {
+    drawChart(el.querySelector('canvas'), i === 0 ? '#22c55e' : '#f59e0b', i * 42);
+  });
+}
+
+window.addEventListener('resize', initCharts);
+initCharts();
+
+// Animate prices
+function animatePrices() {
+  const tickers = [
+    { el: 'price1', base: 138.42, symbol: 'NVDA' },
+    { el: 'price2', base: 366.80, symbol: 'MSTR' },
+  ];
+  tickers.forEach(t => {
+    const change = (Math.random() - 0.45) * 2;
+    t.base += change;
+    const pct = ((t.base - 130) / 130 * 100).toFixed(2);
+    const el = document.getElementById(t.el);
+    const up = parseFloat(pct) >= 0;
+    el.className = 'price' + (up ? '' : ' down');
+    el.textContent = `$${t.base.toFixed(2)} ${up ? '+' : ''}${pct}%`;
+  });
+  setTimeout(animatePrices, 1500 + Math.random() * 2000);
+}
+animatePrices();
+
+// Ticker
+const tickerData = [
+  { s: 'NVDA', p: '138.42', c: '+2.67%', up: true },
+  { s: 'MSTR', p: '366.80', c: '+5.12%', up: true },
+  { s: 'AAPL', p: '173.50', c: '-0.34%', up: false },
+  { s: 'TSLA', p: '178.22', c: '+1.88%', up: true },
+  { s: 'COIN', p: '225.10', c: '+3.41%', up: true },
+  { s: 'ORCL', p: '168.90', c: '+2.15%', up: true },
+  { s: 'CRWV', p: '52.30', c: '+8.22%', up: true },
+  { s: 'SPY', p: '572.45', c: '+0.52%', up: true },
+  { s: 'QQQ', p: '498.30', c: '+0.78%', up: true },
+  { s: 'AMD', p: '162.80', c: '-1.23%', up: false },
+  { s: 'MSFT', p: '428.10', c: '+0.41%', up: true },
+  { s: 'AMZN', p: '186.55', c: '+1.05%', up: true },
+];
+const track = document.getElementById('tickerTrack');
+const items = [...tickerData, ...tickerData].map(d =>
+  `<span class="ticker-item"><span class="t-symbol">${d.s}</span> $${d.p} <span class="${d.up ? 't-up' : 't-down'}">${d.c}</span></span>`
+).join('');
+track.innerHTML = items;
+</script>
+</body>
+</html>

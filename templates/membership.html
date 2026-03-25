@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}会员 — 美股王{% endblock %}
+{% block content %}
+
+<!-- Hero: Gold gradient -->
+<div class="about-hero" style="padding:48px 0">
+  <div class="container" style="text-align:center">
+    <h1 style="font-size:36px;font-weight:800;color:#1a1200;letter-spacing:-1px" data-i18n="member.title">美股王年度会员</h1>
+    <p style="color:#6b5a1e;margin-top:10px;font-size:16px" data-i18n="member.sub">解锁全部功能，加入数万投资者的交易社区</p>
+  </div>
+</div>
+
+<!-- Band 1: WHITE — Pricing + Features Side by Side -->
+<div class="band band-white" style="padding:48px 0">
+  <div class="container">
+    <div style="display:grid;grid-template-columns:340px 1fr;gap:32px;align-items:start">
+      <!-- Left: Pricing Card -->
+      <div class="pricing-card" style="position:sticky;top:72px">
+        <div style="font-size:14px;color:#6b5a1e;font-weight:600" data-i18n="member.annual">年度会员</div>
+        <div class="pc-price">$200</div>
+        <div class="pc-period" data-i18n="member.per_year">每年</div>
+        <div class="pc-features" style="grid-template-columns:1fr">
+          <div class="pc-feat" data-i18n="member.feat1">美股王投资家智能交易分析软件使用权</div>
+          <div class="pc-feat" data-i18n="member.feat2">独创趋势交易法 + 51%法则完整教学</div>
+          <div class="pc-feat" data-i18n="member.feat3">专属VIP点评与实盘分析</div>
+          <div class="pc-feat" data-i18n="member.feat5">实时交易直播功能</div>
+          <div class="pc-feat" data-i18n="member.feat7">每周多次王老师盘后分享视频</div>
+          <div class="pc-feat" data-i18n="member.feat9">优先客服支持</div>
+        </div>
+        <button class="btn btn-block" style="font-size:16px;padding:14px;background:#1c1f2e;color:#FFD000;font-weight:700" onclick="buyMembership()" data-i18n="member.buy">立即购买</button>
+        <p id="memberStatus" style="margin-top:12px;font-size:12px;color:var(--text2)"></p>
+      </div>
+      <!-- Right: Feature Details -->
+      <div>
+        <h2 class="about-h2" style="margin-top:0" data-i18n="member.why_title">为什么选择美股王？</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="feature-card">
+            <div class="fc-icon">1</div>
+            <h4 data-i18n="member.why1_t">独创趋势交易法</h4>
+            <p data-i18n="member.why1_d">日大趋势看清方向，赢率从50%提升到70%。配合51法则进一步提升到75%。告别盲猜，科学交易。</p>
+          </div>
+          <div class="feature-card">
+            <div class="fc-icon">2</div>
+            <h4 data-i18n="member.why2_t">智能交易分析软件</h4>
+            <p data-i18n="member.why2_d">美股王投资家软件：支持日大小趋势图、操盘线、51法则、中轴线系统、多屏联动、自定义扫描器等强大功能。</p>
+          </div>
+          <div class="feature-card">
+            <div class="fc-icon">3</div>
+            <h4 data-i18n="member.why3_t">可复制的成功</h4>
+            <p data-i18n="member.why3_d">女神Judy从零基础到95%赢率、平均日赚$5,000。三个月学习方法已被证实有效，1万美金日赚$300~$500。</p>
+          </div>
+          <div class="feature-card">
+            <div class="fc-icon">4</div>
+            <h4 data-i18n="member.why4_t">20年投资经验</h4>
+            <p data-i18n="member.why4_d">创始人王维拥有基金经理和操盘手经验，十年教育品牌，服务上万学员。一年顶十年。</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Band 2: GOLD — Course System (2-row grid) -->
+<div class="band band-gold" style="padding:48px 0">
+  <div class="container">
+    <h2 class="about-h2" data-i18n="member.course_title">完整课程体系</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:24px">🎓</span>
+          <h3 style="font-size:15px" data-i18n="member.c1_t">入门课程</h3>
+        </div>
+        <p style="font-size:13px" data-i18n="member.c1_d">华尔街投资分享课 — 美股交易基础及准备，帮助零基础投资者快速入门美股市场。</p>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:24px">📊</span>
+          <h3 style="font-size:15px" data-i18n="member.c2_t">当日交易宝典</h3>
+        </div>
+        <p style="font-size:13px" data-i18n="member.c2_d">V4.0 完整版 — 当日交易基本概念、可复制技巧、三种基础交易策略、选股方法、操盘线运用。</p>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:24px">📈</span>
+          <h3 style="font-size:15px" data-i18n="member.c3_t">技术分析大全</h3>
+        </div>
+        <p style="font-size:13px" data-i18n="member.c3_d">K线图基础、日大小趋势图、移动平均线、中轴线系统、操盘线、报价表与扫描器。</p>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:24px">🔄</span>
+          <h3 style="font-size:15px" data-i18n="member.c4_t">波段交易</h3>
+        </div>
+        <p style="font-size:13px" data-i18n="member.c4_d">美股王波段交易大赢家 — 51法则精准识别强支撑强阻力，简单安全，赚钱效应好。</p>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:24px">🛡️</span>
+          <h3 style="font-size:15px" data-i18n="member.c5_t">风险控制</h3>
+        </div>
+        <p style="font-size:13px" data-i18n="member.c5_d">交易是概率的游戏 — 最大1%止损纪律，情绪与决策偏差管理，自律守率交易心理。</p>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span style="font-size:24px">💻</span>
+          <h3 style="font-size:15px" data-i18n="member.c6_t">软件教学</h3>
+        </div>
+        <p style="font-size:13px" data-i18n="member.c6_d">投资家软件4.2完整教学 — 界面布局、窗口联动、多层分布、快速调用、扫描过滤器。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Band 3: WHITE — Learning Roadmap + Testimonials Side by Side -->
+<div class="band band-white" style="padding:48px 0">
+  <div class="container">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px">
+      <!-- Left: Learning Roadmap -->
+      <div>
+        <h2 class="about-h2" style="margin-top:0">跟我学，快速复制交易女神JUDY赚大钱</h2>
+        <p style="color:var(--up);margin-bottom:20px;font-size:13px;font-weight:600">用1～3万美金启动，平均日赚$300～$500，交易赢率70%</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:#fffcf0;border:1px solid rgba(255,208,0,.2);border-radius:8px">
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--gold);color:#1a1200;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0">1</div>
+            <div><div style="font-size:14px;font-weight:600;color:#1a1200">参加线上线下培训</div><div style="font-size:12px;color:#6b5a1e">尽快掌握美股王软件神器</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:#fffcf0;border:1px solid rgba(255,208,0,.2);border-radius:8px">
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--up);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0">2</div>
+            <div><div style="font-size:14px;font-weight:600;color:#1a1200">参加1～3天线下实盘指导</div><div style="font-size:12px;color:#6b5a1e">小袁老师实盘指导</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:#fffcf0;border:1px solid rgba(255,208,0,.2);border-radius:8px">
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0">3</div>
+            <div><div style="font-size:14px;font-weight:600;color:#1a1200">刻意练习2～3个月</div><div style="font-size:12px;color:#6b5a1e">在王老师陪伴下，1～2个27吋大屏，用美股王投资家软件</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:#fffcf0;border:1px solid rgba(255,208,0,.2);border-radius:8px">
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--gold);color:#1a1200;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0">4</div>
+            <div><div style="font-size:14px;font-weight:600;color:#1a1200">1～3万美金启动波段交易</div><div style="font-size:12px;color:#6b5a1e">平均每天赚1～2%，净利润$300～$500</div></div>
+          </div>
+        </div>
+        <h2 class="about-h2" style="margin-top:28px" data-i18n="member.roadmap">三个月学习路线</h2>
+        <p style="color:var(--up);margin-bottom:20px;font-size:13px;font-weight:600" data-i18n="member.roadmap_sub">快的一个月学会，慢的两到三个月学会</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:#fffcf0;border:1px solid rgba(255,208,0,.2);border-radius:8px">
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--gold);color:#1a1200;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0">1</div>
+            <div><div style="font-size:14px;font-weight:600;color:#1a1200" data-i18n="member.step1_t">学会工具</div><div style="font-size:12px;color:#6b5a1e" data-i18n="member.step1_d">掌握美股王投资家软件操作</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:#fffcf0;border:1px solid rgba(255,208,0,.2);border-radius:8px">
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--up);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0">2</div>
+            <div><div style="font-size:14px;font-weight:600;color:#1a1200" data-i18n="member.step2_t">学会布局</div><div style="font-size:12px;color:#6b5a1e" data-i18n="member.step2_d">单屏/多屏交易界面设置</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:#fffcf0;border:1px solid rgba(255,208,0,.2);border-radius:8px">
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0">3</div>
+            <div><div style="font-size:14px;font-weight:600;color:#1a1200" data-i18n="member.step3_t">了解指标</div><div style="font-size:12px;color:#6b5a1e" data-i18n="member.step3_d">看懂趋势图、操盘线、51法则</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:#fffcf0;border:1px solid rgba(255,208,0,.2);border-radius:8px">
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--gold);color:#1a1200;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0">4</div>
+            <div><div style="font-size:14px;font-weight:600;color:#1a1200" data-i18n="member.step4_t">刻意练习</div><div style="font-size:12px;color:#6b5a1e" data-i18n="member.step4_d">小量资金每天交易，坚持两个月</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 18px;background:#fffcf0;border:1px solid rgba(255,208,0,.2);border-radius:8px">
+            <div style="width:34px;height:34px;border-radius:50%;background:var(--down);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0">5</div>
+            <div><div style="font-size:14px;font-weight:600;color:#1a1200" data-i18n="member.step5_t">加大仓位</div><div style="font-size:12px;color:#6b5a1e" data-i18n="member.step5_d">赢率提高后逐步增加交易规模</div></div>
+          </div>
+        </div>
+      </div>
+      <!-- Right: Testimonials -->
+      <div>
+        <h2 class="about-h2" style="margin-top:0" data-i18n="member.testimonials">学员见证</h2>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="card" style="background:#f0faf8;border-color:rgba(38,166,154,.2)">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:40px;height:40px;border-radius:50%;background:var(--up);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff">J</div>
+              <div><div style="font-weight:600;font-size:14px;color:#1a1200">Judy</div><div style="font-size:11px;color:var(--up)" data-i18n="member.judy_desc">19年硅谷线下培训班学员</div></div>
+            </div>
+            <p style="font-size:13px;line-height:1.7;color:#2a2010" data-i18n="member.judy_quote">从广东移民到美国，关掉超市全职炒美股。学习美股王波段交易后，95%赢率，正常市场平均日赚$5,000，波动大的市场日赚$20,000-$80,000。</p>
+            <div style="display:flex;gap:16px;margin-top:12px;padding:12px;background:rgba(38,166,154,.06);border-radius:8px">
+              <div style="text-align:center;flex:1"><div style="font-size:18px;font-weight:800;color:var(--up)">95%</div><div style="font-size:10px;color:#6b5a1e;margin-top:2px">赢率</div></div>
+              <div style="text-align:center;flex:1"><div style="font-size:18px;font-weight:800;color:var(--up)">$5K</div><div style="font-size:10px;color:#6b5a1e;margin-top:2px">日均收益</div></div>
+              <div style="text-align:center;flex:1"><div style="font-size:18px;font-weight:800;color:var(--up)">$80K</div><div style="font-size:10px;color:#6b5a1e;margin-top:2px">日最高</div></div>
+            </div>
+            <p style="margin-top:10px;font-size:12px;color:var(--up);font-weight:600" data-i18n="member.judy_tip">六字真言：支撑买，阻力卖</p>
+          </div>
+          <div class="card" style="background:#fffcf0;border-color:rgba(255,208,0,.2)">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <div style="width:40px;height:40px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:700;color:#1a1200">王</div>
+              <div><div style="font-weight:600;font-size:14px;color:#1a1200" data-i18n="member.wang_name">王维老师</div><div style="font-size:11px;color:var(--gold2)" data-i18n="member.wang_desc">美股王创始人</div></div>
+            </div>
+            <p style="font-size:13px;line-height:1.7;color:#2a2010" data-i18n="member.wang_quote">"经过2-3个月刻意练习，专注提升规律识别力，打磨2-3种适合自身的高胜率策略。聚焦方法、淬炼识别规律、守株待兔、打磨高赢率策略。"</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Band 4: BLUE — 终身竞争力 + 2026计划 -->
+<div class="band band-blue" style="padding:48px 0">
+  <div class="container">
+    <div class="about-cols" style="gap:32px;align-items:flex-start">
+      <div class="about-main">
+        <h2 class="about-h2" style="margin-top:0">你的终身核心竞争力</h2>
+        <p style="font-size:15px;line-height:1.9">就是<strong>直接从美股市场上赚钱的能力</strong>，华尔街就是你的提款机。</p>
+        <p style="font-size:15px;line-height:1.9;margin-top:12px">你的赚钱能力会超过<strong>99%以上的美股散户</strong>，你一辈子都不会失业。</p>
+      </div>
+      <div class="about-side">
+        <h2 class="about-h2" style="margin-top:0">王老师2026年最新计划</h2>
+        <ul class="about-list" style="font-size:14px;line-height:2">
+          <li>培养<strong>40名美股王教练</strong> — 学习能力强、快速拿结果、服务高净值客户</li>
+          <li>办好<strong>北京、深圳、杭州</strong>线下培训和服务</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Band 5: GREEN — CTA -->
+<div class="band band-green" style="text-align:center;padding:56px 0">
+  <div class="container">
+    <h2 style="font-size:28px;margin-bottom:8px" data-i18n="member.cta_title">准备好开始了吗？</h2>
+    <p style="margin-bottom:24px;font-size:15px" data-i18n="member.cta_sub">加入美股王，掌握终生赚美金的能力</p>
+    <button class="btn" style="padding:16px 48px;font-size:16px;background:#fff;color:var(--up);font-weight:700;border-radius:8px;box-shadow:0 4px 16px rgba(38,166,154,.2)" onclick="buyMembership()"><span data-i18n="member.buy">立即购买</span> $200/<span data-i18n="member.per_year">年</span></button>
+    <p style="margin-top:24px;font-size:13px;opacity:.9">低成本体验：美股王软件+培训课程+王老师陪跑，二个月波段VIP会员体验</p>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+async function checkMember(){
+  await APP.init();
+  if(APP.user&&APP.user.is_member){
+    document.getElementById('memberStatus').innerHTML=`<span style="color:var(--up)">&#10003; ${I18N.t('member.is_member')} ${new Date(APP.user.member_until).toLocaleDateString(I18N.lang==='zh'?'zh-CN':'en-US')}</span>`;
+  }
+}
+async function buyMembership(){
+  await APP.init();
+  if(!APP.user){location.href='/register';return;}
+  if(APP.user.is_member){alert(I18N.t('member.already'));return;}
+  try{
+    const r=await APP.api('POST','/api/payment/create-session');
+    if(confirm(I18N.t('member.confirm'))){
+      await APP.api('POST',`/api/payment/demo-complete/${r.payment_id}`);
+      alert(I18N.t('member.success'));
+      location.reload();
+    }
+  }catch(e){alert(e.message);}
+}
+checkMember();
+</script>
+{% endblock %}

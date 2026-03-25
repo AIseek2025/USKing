@@ -1,0 +1,453 @@
+{% extends "base.html" %}
+{% block title %}管理后台 — 美股王{% endblock %}
+{% block content %}
+<div class="container" style="padding-top:24px">
+  <h2 style="margin-bottom:20px" data-i18n="admin.title">管理后台</h2>
+  <div class="tabs">
+    <button class="tab active" onclick="showAdminTab('banners',this)" data-i18n="admin.banners">海报管理</button>
+    <button class="tab" onclick="showAdminTab('albums',this)">课程专辑</button>
+    <button class="tab" onclick="showAdminTab('users',this)" data-i18n="admin.users">用户管理</button>
+    <button class="tab" onclick="showAdminTab('streams',this)" data-i18n="admin.streams">直播管理</button>
+    <button class="tab" onclick="showAdminTab('posts',this)" data-i18n="admin.posts_tab">动态管理</button>
+    <button class="tab" onclick="showAdminTab('payments',this)" data-i18n="admin.payments">会员记录</button>
+  </div>
+  <div id="adminBanners"></div>
+  <div id="adminAlbums" style="display:none"></div>
+  <div id="adminUsers" style="display:none"></div>
+  <div id="adminStreams" style="display:none"></div>
+  <div id="adminPosts" style="display:none"></div>
+  <div id="adminPayments" style="display:none"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function showAdminTab(name,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['banners','albums','users','streams','posts','payments'].forEach(n=>{
+    document.getElementById('admin'+n.charAt(0).toUpperCase()+n.slice(1)).style.display=n===name?'':'none';
+  });
+  if(name==='banners')loadBanners();
+  if(name==='albums')loadAlbums();
+  if(name==='users')loadUsers();
+  if(name==='streams')loadStreams();
+  if(name==='posts')loadAdminPosts();
+  if(name==='payments')loadPayments();
+}
+
+// --------------- Banner Management ---------------
+async function loadBanners(){
+  const el=document.getElementById('adminBanners');
+  el.innerHTML=`
+    <div class="card" style="margin-bottom:20px;padding:20px">
+      <h3 style="font-size:15px;margin-bottom:16px">${I18N.t('admin.upload_banner')}</h3>
+      <form id="bannerForm" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+        <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0">
+          <label>${I18N.t('admin.banner_img')}</label>
+          <input type="file" id="bannerFile" accept="image/*" class="form-input" style="padding:8px">
+        </div>
+        <div class="form-group" style="flex:1;min-width:150px;margin-bottom:0">
+          <label>${I18N.t('admin.banner_title')}</label>
+          <input type="text" id="bannerTitle" class="form-input">
+        </div>
+        <div class="form-group" style="flex:1;min-width:150px;margin-bottom:0">
+          <label>${I18N.t('admin.banner_link')}</label>
+          <input type="text" id="bannerLink" class="form-input" placeholder="https://...">
+        </div>
+        <div class="form-group" style="width:80px;margin-bottom:0">
+          <label>${I18N.t('admin.banner_sort')}</label>
+          <input type="number" id="bannerSort" class="form-input" value="0" style="width:80px">
+        </div>
+        <button type="submit" class="btn btn-primary" style="height:42px">${I18N.t('admin.upload')}</button>
+      </form>
+      <div id="bannerPreview" style="margin-top:12px"></div>
+    </div>
+    <div id="bannerList"><div class="empty-state"><p>${I18N.t('common.loading')}</p></div></div>
+  `;
+  document.getElementById('bannerFile').addEventListener('change', function(){
+    const file=this.files[0];
+    if(file){
+      const url=URL.createObjectURL(file);
+      document.getElementById('bannerPreview').innerHTML=`<img src="${url}" style="max-height:120px;border-radius:8px;border:1px solid var(--border)">`;
+    }
+  });
+  document.getElementById('bannerForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const file=document.getElementById('bannerFile').files[0];
+    if(!file)return;
+    const fd=new FormData();
+    fd.append('file',file);
+    fd.append('title',document.getElementById('bannerTitle').value);
+    fd.append('link_url',document.getElementById('bannerLink').value);
+    fd.append('sort_order',document.getElementById('bannerSort').value);
+    try{
+      const token=localStorage.getItem('token');
+      const res=await fetch('/api/admin/banners',{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd});
+      if(!res.ok)throw new Error('Upload failed');
+      document.getElementById('bannerForm').reset();
+      document.getElementById('bannerPreview').innerHTML='';
+      loadBannerList();
+    }catch(e){alert(e.message);}
+  });
+  loadBannerList();
+}
+
+async function loadBannerList(){
+  try{
+    const r=await APP.api('GET','/api/admin/banners');
+    const el=document.getElementById('bannerList');
+    if(!r.banners||!r.banners.length){
+      el.innerHTML=`<div class="empty-state"><p>${I18N.t('admin.no_banners')}</p></div>`;
+      return;
+    }
+    el.innerHTML=`<div class="banner-admin-grid">${r.banners.map(b=>`
+      <div class="banner-admin-card ${b.is_active?'':'banner-inactive'}">
+        <img src="${b.image_url}" alt="${b.title}">
+        <div class="bac-info">
+          <div style="font-weight:600;font-size:13px">${b.title||'—'}</div>
+          <div style="font-size:11px;color:var(--text3)">${I18N.t('admin.banner_sort')}: ${b.sort_order} | ${b.is_active?`<span style="color:var(--up)">${I18N.t('common.enabled')}</span>`:`<span style="color:var(--down)">${I18N.t('common.disabled')}</span>`}</div>
+        </div>
+        <div class="bac-actions">
+          <button class="btn btn-ghost btn-sm" onclick="toggleBanner(${b.id})">${b.is_active?I18N.t('admin.disable'):I18N.t('admin.enable')}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteBanner(${b.id})">${I18N.t('profile.delete')}</button>
+        </div>
+      </div>
+    `).join('')}</div>`;
+  }catch(e){
+    document.getElementById('bannerList').innerHTML=`<div class="empty-state"><p>Error</p></div>`;
+  }
+}
+
+async function toggleBanner(id){
+  await APP.api('PUT',`/api/admin/banners/${id}`);
+  loadBannerList();
+}
+
+async function deleteBanner(id){
+  if(!confirm(I18N.t('common.confirm_delete')))return;
+  await APP.api('DELETE',`/api/admin/banners/${id}`);
+  loadBannerList();
+}
+
+// --------------- Album / Course Management ---------------
+async function loadAlbums(){
+  const el=document.getElementById('adminAlbums');
+  el.innerHTML=`
+    <div class="card" style="margin-bottom:20px;padding:20px">
+      <h3 style="font-size:15px;margin-bottom:16px">创建课程专辑</h3>
+      <form id="albumForm">
+        <div class="form-group"><label>专辑名称</label><input type="text" id="albumTitle" class="form-input" required></div>
+        <div class="form-group"><label>课程介绍</label><textarea id="albumDesc" class="form-input" rows="3" style="resize:vertical"></textarea></div>
+        <div class="form-group"><label>封面图URL（可选）</label><input type="text" id="albumCover" class="form-input" placeholder="https://..."></div>
+        <div class="form-group"><label>排序</label><input type="number" id="albumSort" class="form-input" value="0" style="width:100px"></div>
+        <button type="submit" class="btn btn-primary">创建专辑</button>
+      </form>
+    </div>
+    <div id="albumList"><div class="empty-state"><p>${I18N.t('common.loading')}</p></div></div>
+  `;
+  document.getElementById('albumForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    try{
+      await APP.api('POST','/api/admin/albums',{
+        title: document.getElementById('albumTitle').value,
+        description: document.getElementById('albumDesc').value,
+        cover_url: document.getElementById('albumCover').value,
+        sort_order: parseInt(document.getElementById('albumSort').value)||0,
+      });
+      document.getElementById('albumForm').reset();
+      loadAlbumList();
+    }catch(err){alert(err.message);}
+  });
+  loadAlbumList();
+}
+
+async function loadAlbumList(){
+  try{
+    const r=await APP.api('GET','/api/admin/albums');
+    const el=document.getElementById('albumList');
+    if(!r.albums||!r.albums.length){
+      el.innerHTML=`<div class="empty-state"><p>暂无课程专辑</p></div>`;
+      return;
+    }
+    el.innerHTML=r.albums.map(a=>`
+      <div class="card" style="margin-bottom:16px;padding:20px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div>
+            <h3 style="font-size:16px;margin-bottom:4px">${a.title} ${a.is_active?'<span class="badge badge-green">启用</span>':'<span class="badge badge-red">停用</span>'}</h3>
+            <p style="font-size:12px;color:var(--text2);white-space:pre-line">${a.description||''}</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0">
+            <button class="btn btn-ghost btn-sm" onclick="toggleAlbum(${a.id})">${a.is_active?'停用':'启用'}</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteAlbum(${a.id})">删除</button>
+          </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <h4 style="font-size:13px;margin-bottom:8px;color:var(--gold)">视频列表 (${a.video_count})</h4>
+          ${a.videos&&a.videos.length?`<table class="admin-table"><thead><tr><th>序号</th><th>标题</th><th>链接</th><th>播放</th><th>操作</th></tr></thead><tbody>${a.videos.map((v,i)=>`
+            <tr>
+              <td>${i+1}</td>
+              <td>${v.title}</td>
+              <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><a href="${v.video_url}" target="_blank" style="font-size:11px">${v.video_url}</a></td>
+              <td style="font-family:var(--font-mono)">${v.view_count}</td>
+              <td><button class="btn btn-danger btn-sm" onclick="deleteAlbumVideo(${v.id},${a.id})">删除</button></td>
+            </tr>
+          `).join('')}</tbody></table>`:'<p style="font-size:12px;color:var(--text2)">暂无视频</p>'}
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:12px">
+          <h4 style="font-size:12px;margin-bottom:8px">添加视频</h4>
+          <form onsubmit="addVideoToAlbum(event,${a.id})" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div class="form-group" style="flex:2;min-width:200px;margin-bottom:0">
+              <label>视频标题</label>
+              <input type="text" class="form-input av-title" required>
+            </div>
+            <div class="form-group" style="flex:3;min-width:250px;margin-bottom:0">
+              <label>视频链接</label>
+              <input type="text" class="form-input av-url" required placeholder="http://...">
+            </div>
+            <div class="form-group" style="width:80px;margin-bottom:0">
+              <label>排序</label>
+              <input type="number" class="form-input av-sort" value="0" style="width:80px">
+            </div>
+            <button type="submit" class="btn btn-up btn-sm" style="height:38px">添加</button>
+          </form>
+        </div>
+      </div>
+    `).join('');
+  }catch(err){
+    document.getElementById('albumList').innerHTML=`<div class="empty-state"><p>加载失败</p></div>`;
+  }
+}
+
+async function addVideoToAlbum(e, albumId){
+  e.preventDefault();
+  const form=e.target;
+  const title=form.querySelector('.av-title').value;
+  const url=form.querySelector('.av-url').value;
+  const sort=parseInt(form.querySelector('.av-sort').value)||0;
+  try{
+    await APP.api('POST',`/api/admin/albums/${albumId}/videos`,{title,video_url:url,sort_order:sort});
+    form.reset();
+    loadAlbumList();
+  }catch(err){alert(err.message);}
+}
+
+async function deleteAlbumVideo(videoId, albumId){
+  if(!confirm('确认删除此视频？'))return;
+  await APP.api('DELETE',`/api/admin/albums/videos/${videoId}`);
+  loadAlbumList();
+}
+
+async function toggleAlbum(id){
+  await APP.api('PUT',`/api/admin/albums/${id}/toggle`);
+  loadAlbumList();
+}
+
+async function deleteAlbum(id){
+  if(!confirm('确认删除此专辑及所有视频？'))return;
+  await APP.api('DELETE',`/api/admin/albums/${id}`);
+  loadAlbumList();
+}
+
+// --------------- Users ---------------
+async function loadUsers(){
+  const r=await APP.api('GET','/api/admin/users');
+  const el=document.getElementById('adminUsers');
+  const L=I18N.lang;
+  const thUser=L==='en'?'User':'用户';
+  const thEmail=L==='en'?'Email':'邮箱';
+  const thMember=L==='en'?'Member':'会员';
+  const thLive=L==='en'?'Stream':'直播';
+  const thStatus=L==='en'?'Status':'状态';
+  const thAction=L==='en'?'Actions':'操作';
+  el.innerHTML=`<table class="admin-table"><thead><tr><th>${thUser}</th><th>${thEmail}</th><th>${thMember}</th><th>${thLive}</th><th>${thStatus}</th><th>${thAction}</th></tr></thead><tbody>${
+    r.users.map(u=>{
+      const locale=L==='zh'?'zh-CN':'en-US';
+      return `<tr>
+      <td><a href="/u/${u.username}" style="font-weight:600">${u.display_name||u.username}</a><br><span style="font-size:11px;color:var(--text3)">@${u.username}</span></td>
+      <td>${u.email||'—'} ${u.email_verified?`<span class="badge badge-green">${I18N.t('common.verified')}</span>`:''}</td>
+      <td>${u.is_member?`<span class="badge badge-yellow">${I18N.t('common.year_member')}</span><br><span style="font-size:10px;color:var(--text3)">${u.member_until?new Date(u.member_until).toLocaleDateString(locale):'—'}</span>`:`<span class="badge badge-gray">${L==='en'?'Free':'普通'}</span>`}</td>
+      <td>${u.live_enabled?`<span class="badge badge-green">${I18N.t('common.enabled')}</span>`:`<span class="badge badge-red">${I18N.t('common.disabled')}</span>`}</td>
+      <td>${u.is_active?`<span class="badge badge-green">${I18N.t('common.normal')}</span>`:`<span class="badge badge-red">${I18N.t('common.banned')}</span>`} ${u.is_admin?`<span class="badge badge-yellow">${I18N.t('nav.admin')}</span>`:''}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="toggleUserField('${u.id}','live_enabled',${!u.live_enabled})">${u.live_enabled?(L==='en'?'Disable Stream':'关闭直播'):(L==='en'?'Enable Stream':'开启直播')}</button>
+        <button class="btn btn-ghost btn-sm" onclick="toggleUserField('${u.id}','is_active',${!u.is_active})">${u.is_active?(L==='en'?'Ban':'禁用'):(L==='en'?'Unban':'启用')}</button>
+      </td>
+    </tr>`;}).join('')
+  }</tbody></table>`;
+}
+async function toggleUserField(uid,field,val){
+  const body={};body[field]=val;
+  await APP.api('PUT',`/api/admin/user/${uid}`,body);
+  loadUsers();
+}
+
+// --------------- Streams ---------------
+async function loadStreams(){
+  const el=document.getElementById('adminStreams');
+  const L=I18N.lang;
+
+  // Load live settings + stream list in parallel
+  const [settings, streamsData] = await Promise.all([
+    APP.api('GET','/api/admin/live-settings'),
+    APP.api('GET','/api/admin/streams'),
+  ]);
+
+  const s=settings;
+  const newDefault=s.new_user_live_default;
+
+  let html=`
+    <!-- Live Permission Control Panel -->
+    <div class="card" style="margin-bottom:20px;padding:24px">
+      <h3 style="font-size:16px;margin-bottom:16px;color:var(--gold)">🎬 直播权限管理</h3>
+
+      <!-- Stats Row -->
+      <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px;padding:14px;background:var(--pure-dark);border:1px solid var(--border);border-radius:var(--radius);text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--white);font-family:var(--font-mono)">${s.total_users}</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px">总用户数（非管理员）</div>
+        </div>
+        <div style="flex:1;min-width:140px;padding:14px;background:var(--pure-dark);border:1px solid rgba(38,166,154,.2);border-radius:var(--radius);text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--up);font-family:var(--font-mono)">${s.enabled_count}</div>
+          <div style="font-size:11px;color:var(--up);margin-top:4px">已开启直播权限</div>
+        </div>
+        <div style="flex:1;min-width:140px;padding:14px;background:var(--pure-dark);border:1px solid rgba(239,83,80,.2);border-radius:var(--radius);text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--down);font-family:var(--font-mono)">${s.disabled_count}</div>
+          <div style="font-size:11px;color:var(--down);margin-top:4px">已关闭直播权限</div>
+        </div>
+      </div>
+
+      <!-- New User Default Toggle -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--pure-dark);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px">
+        <div>
+          <div style="font-weight:600;font-size:14px;color:var(--white)">新注册用户默认直播权限</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">关闭后，新注册用户无法直播，需管理员手动开启</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:12px;font-weight:600;color:${newDefault?'var(--up)':'var(--down)'}">${newDefault?'已开启':'已关闭'}</span>
+          <button class="btn ${newDefault?'btn-danger':'btn-up'} btn-sm" onclick="toggleNewUserDefault(${!newDefault})">${newDefault?'关闭':'开启'}</button>
+        </div>
+      </div>
+
+      <!-- Bulk Actions -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-up" onclick="bulkLiveAction('enable')" style="flex:1;min-width:180px">
+          ✅ 打开所有用户直播权限
+        </button>
+        <button class="btn btn-danger" onclick="bulkLiveAction('disable')" style="flex:1;min-width:180px">
+          🚫 关闭所有用户直播权限
+        </button>
+      </div>
+    </div>
+
+    <!-- Stream List -->
+    <h3 style="font-size:15px;margin-bottom:12px;color:var(--white)">直播记录</h3>
+  `;
+
+  const streams=streamsData.streams||[];
+  if(streams.length){
+    html+=`<table class="admin-table"><thead><tr><th>${L==='en'?'Streamer':'主播'}</th><th>${L==='en'?'Title':'标题'}</th><th>${L==='en'?'Status':'状态'}</th><th>${L==='en'?'Viewers':'观看'}</th><th>${L==='en'?'Started':'开始时间'}</th><th>${L==='en'?'Actions':'操作'}</th></tr></thead><tbody>${
+      streams.map(st=>{
+        const u=st.user||{};
+        const locale=L==='zh'?'zh-CN':'en-US';
+        return `<tr>
+          <td>${u.display_name||u.username||'—'}</td><td>${st.title||'—'}</td>
+          <td>${st.is_live?`<span class="badge badge-red">${I18N.t('common.live')}</span>`:`<span class="badge badge-gray">${I18N.t('common.ended')}</span>`}</td>
+          <td>${st.viewer_count||0}</td><td>${st.started_at?new Date(st.started_at).toLocaleString(locale):'—'}</td>
+          <td>${st.is_live?`<button class="btn btn-danger btn-sm" onclick="stopAdminStream(${st.id})">${L==='en'?'Force Stop':'强制停播'}</button>`:''}</td>
+        </tr>`;
+      }).join('')
+    }</tbody></table>`;
+  }else{
+    html+=`<div class="empty-state"><p>暂无直播记录</p></div>`;
+  }
+
+  el.innerHTML=html;
+}
+
+async function toggleNewUserDefault(enable){
+  const action=enable?'开启':'关闭';
+  if(!confirm(`确认${action}新注册用户的默认直播权限？`))return;
+  await APP.api('PUT',`/api/admin/live-settings/new-default?enable=${enable}`);
+  loadStreams();
+}
+
+async function bulkLiveAction(action){
+  const label=action==='enable'?'打开所有用户直播权限':'关闭所有用户直播权限';
+  if(!confirm(`确认执行：${label}？\n此操作将影响所有非管理员用户。`))return;
+  const r=await APP.api('PUT',`/api/admin/live-settings/${action}-all`);
+  alert(`操作成功，影响 ${r.affected} 个用户`);
+  loadStreams();
+}
+
+async function stopAdminStream(id){
+  if(!confirm(I18N.t('common.confirm_delete')))return;
+  await APP.api('PUT',`/api/admin/stream/${id}/stop`);
+  loadStreams();
+}
+
+// --------------- Posts ---------------
+async function loadAdminPosts(){
+  const r=await APP.api('GET','/api/admin/posts');
+  const el=document.getElementById('adminPosts');
+  const L=I18N.lang;
+  el.innerHTML=`<table class="admin-table"><thead><tr><th>${L==='en'?'Author':'作者'}</th><th>${L==='en'?'Content':'内容'}</th><th>${L==='en'?'Status':'状态'}</th><th>${L==='en'?'Time':'时间'}</th><th>${L==='en'?'Actions':'操作'}</th></tr></thead><tbody>${
+    r.posts.map(p=>{
+      const a=p.author||{};
+      const locale=L==='zh'?'zh-CN':'en-US';
+      return `<tr>
+        <td>${a.display_name||a.username||'—'}</td>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.content}</td>
+        <td>${p.hidden?`<span class="badge badge-red">${I18N.t('common.hidden')}</span>`:`<span class="badge badge-green">${I18N.t('common.visible')}</span>`}</td>
+        <td>${new Date(p.created_at).toLocaleString(locale)}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" onclick="togglePostHide(${p.id})">${p.hidden?(L==='en'?'Show':'取消隐藏'):(L==='en'?'Hide':'隐藏')}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAdminPost(${p.id})">${I18N.t('profile.delete')}</button>
+        </td>
+      </tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+async function togglePostHide(id){
+  await APP.api('PUT',`/api/admin/post/${id}/hide`);
+  loadAdminPosts();
+}
+async function deleteAdminPost(id){
+  if(!confirm(I18N.t('common.confirm_delete')))return;
+  await APP.api('DELETE',`/api/admin/post/${id}`);
+  loadAdminPosts();
+}
+
+// --------------- Payments ---------------
+async function loadPayments(){
+  const r=await APP.api('GET','/api/admin/payments');
+  const el=document.getElementById('adminPayments');
+  const L=I18N.lang;
+  el.innerHTML=`<table class="admin-table"><thead><tr><th>${L==='en'?'User':'用户'}</th><th>${L==='en'?'Amount':'金额'}</th><th>${L==='en'?'Status':'状态'}</th><th>${L==='en'?'Period':'会员期限'}</th><th>${L==='en'?'Time':'支付时间'}</th></tr></thead><tbody>${
+    r.payments.map(p=>{
+      const u=p.user||{};
+      const locale=L==='zh'?'zh-CN':'en-US';
+      const statusBadge=p.status==='paid'?'badge-green':p.status==='pending'?'badge-yellow':'badge-red';
+      const statusText=p.status==='paid'?I18N.t('common.paid'):p.status==='pending'?I18N.t('common.pending'):'Failed';
+      return `<tr>
+        <td>${u.display_name||u.username||'—'} ${u.is_member?`<span class="badge badge-yellow">${I18N.t('common.year_member')}</span>`:''}</td>
+        <td>$${p.amount}</td>
+        <td><span class="badge ${statusBadge}">${statusText}</span></td>
+        <td>${p.membership_start?new Date(p.membership_start).toLocaleDateString(locale):'—'} ~ ${p.membership_end?new Date(p.membership_end).toLocaleDateString(locale):'—'}</td>
+        <td>${new Date(p.created_at).toLocaleString(locale)}</td>
+      </tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+
+// --------------- Init ---------------
+async function initAdmin(){
+  await APP.init();
+  if(!APP.user||!APP.user.is_admin){
+    document.getElementById('adminBanners').innerHTML=`<div class="empty-state"><p>${I18N.t('admin.no_perm')}</p></div>`;
+    return;
+  }
+  loadBanners();
+}
+initAdmin();
+</script>
+{% endblock %}

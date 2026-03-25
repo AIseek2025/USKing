@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}美股王 · 交易直播平台{% endblock %}</title>
+<link rel="icon" href="/static/nav-logo-mark.svg?v=1" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/nav-logo-mark.svg?v=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/style.css">
+{% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}" data-title-i18n="spa.doc_title">
+
+<nav class="navbar">
+  <a href="/" class="nav-logo">
+    <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="6" fill="var(--accent)"/><path d="M7 18l4-6 3 3 4-5 3 4" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="9" r="2" fill="#000"/></svg>
+    <span data-i18n="nav.brand">美股王</span>
+  </a>
+  <div class="nav-search-wrap">
+    <form class="nav-search-form" action="/search" method="get" onsubmit="return navDoSearch(event)">
+      <svg class="nav-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" name="q" class="nav-search-input" data-i18n-ph="nav.search_ph" placeholder="搜索课程、直播、动态..." autocomplete="off" id="globalSearchInput">
+    </form>
+  </div>
+  <div class="nav-right">
+    <a href="javascript:void(0)" id="navPublishBtn" class="btn-accent-sm" onclick="typeof openPublishModal==='function'?openPublishModal():location.href='/'" style="display:none" data-i18n="nav.publish">+ 投稿</a>
+    <button type="button" class="lang-toggle" id="langToggle" onclick="window.I18N&&window.I18N.toggle()" data-i18n-title="nav.lang_title" title="切换语言">EN</button>
+    <!-- DM button — sits directly in navbar to avoid overflow clipping -->
+    <div class="dm-wrap" id="dmWrap" style="display:none">
+      <button class="dm-trigger" id="dmTrigger" data-i18n-title="dm.title" title="私信">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        <span class="dm-badge" id="dmBadge" style="display:none">0</span>
+      </button>
+      <div class="dm-popup" id="dmPopup">
+        <div class="dm-sidebar">
+          <div class="dm-popup-header"><h4 data-i18n="dm.title">私信</h4></div>
+          <div class="dm-search-bar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="dmSearchInput" data-i18n-ph="dm.search_ph" placeholder="搜索用户名 / ID..." oninput="dmSearchUser(this.value)">
+          </div>
+          <div class="dm-search-results" id="dmSearchResults" style="display:none"></div>
+          <div class="dm-conv-list" id="dmConvList">
+            <div class="dm-empty" style="padding:24px 12px;font-size:12px;white-space:pre-line" data-i18n="dm.empty">暂无私信<br>搜索用户发起对话</div>
+          </div>
+        </div>
+        <div class="dm-main" id="dmMain">
+          <div class="dm-main-empty" id="dmMainEmpty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--bg4)" stroke-width="1.2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            <p data-i18n="dm.pick_conv">选择对话开始聊天</p>
+          </div>
+          <div class="dm-chat" id="dmChat" style="display:none">
+            <div class="dm-chat-header">
+              <span class="dm-chat-peer" id="dmChatPeer"></span>
+            </div>
+            <div class="dm-chat-messages" id="dmChatMessages"></div>
+            <div class="dm-chat-input">
+              <input type="text" id="dmChatInput" data-i18n-ph="dm.input_ph" placeholder="输入消息..." onkeydown="if(event.key==='Enter')dmSendMsg()">
+              <button onclick="dmSendMsg()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="navUser"></div>
+  </div>
+</nav>
+
+<!-- 个人主页作品详情（朋友圈样式，由 static/js/post-moment.js 驱动） -->
+<div class="modal-overlay" id="postMomentModal" style="display:none;z-index:3000;align-items:flex-start;padding-top:48px" onclick="PostMoment.onOverlayClick(event)">
+  <div class="modal-box" style="max-width:440px;width:92%;max-height:calc(100vh - 72px);overflow-y:auto;margin:0 auto" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px">
+      <div id="postMomentHead" style="display:flex;align-items:center;gap:10px;min-width:0;flex:1"></div>
+      <button type="button" onclick="PostMoment.close()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;line-height:1;flex-shrink:0">&times;</button>
+    </div>
+    <div id="postMomentMeta" style="font-size:12px;color:var(--text3);margin-bottom:10px"></div>
+    <div id="postMomentText" style="font-size:15px;line-height:1.55;color:var(--text);margin-bottom:14px;white-space:pre-wrap;word-break:break-word"></div>
+    <div id="postMomentGrid"></div>
+    <div id="postMomentFooter" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)"></div>
+  </div>
+</div>
+
+{% block content %}{% endblock %}
+
+
+<script src="/static/js/i18n.js?v=6"></script>
+<script src="/static/js/app.js?v=3"></script>
+<script src="/static/js/post-moment.js?v=4"></script>
+<script>
+I18N.init();
+
+function navDoSearch(e){
+  e.preventDefault();
+  const q = document.getElementById('globalSearchInput').value.trim();
+  if(!q) return false;
+  if(typeof doSpaSearch === 'function'){
+    doSpaSearch(q);
+    _hideSearchHistory();
+  } else {
+    location.href = '/search?q=' + encodeURIComponent(q);
+  }
+  return false;
+}
+
+/* Search history */
+let _searchHistory = JSON.parse(localStorage.getItem('searchHistory')||'[]');
+function _saveSearchHistory(q){
+  _searchHistory = _searchHistory.filter(h=>h!==q);
+  _searchHistory.unshift(q);
+  if(_searchHistory.length>15) _searchHistory=_searchHistory.slice(0,15);
+  localStorage.setItem('searchHistory',JSON.stringify(_searchHistory));
+}
+function _clearSearchHistory(){
+  _searchHistory=[];
+  localStorage.removeItem('searchHistory');
+  _hideSearchHistory();
+}
+
+function _showSearchHistory(){
+  let box = document.getElementById('searchHistoryDrop');
+  if(!box){
+    box=document.createElement('div');
+    box.id='searchHistoryDrop';
+    box.style.cssText='position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--bg3);border-radius:0 0 10px 10px;max-height:320px;overflow-y:auto;z-index:100;box-shadow:0 8px 24px rgba(0,0,0,.3)';
+    const wrap=document.querySelector('.nav-search-wrap');
+    if(wrap){wrap.style.position='relative';wrap.appendChild(box)}
+  }
+  const q=document.getElementById('globalSearchInput').value.trim().toLowerCase();
+  const filtered=q?_searchHistory.filter(h=>h.toLowerCase().includes(q)):_searchHistory;
+  if(!filtered.length){box.style.display='none';return}
+  box.style.display='';
+  box.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--bg3)">
+    <span style="font-size:11px;color:var(--text3)">${I18N.t('dm.history')}</span>
+    <button onclick="_clearSearchHistory()" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer">${I18N.t('dm.clear')}</button>
+  </div>`+filtered.map(h=>`<div style="padding:8px 14px;font-size:13px;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .1s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''" onclick="document.getElementById('globalSearchInput').value='${h.replace(/'/g,"\\'")}';navDoSearch(new Event('submit'))">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.replace(/</g,'&lt;')}</span>
+    <button onclick="event.stopPropagation();_searchHistory=_searchHistory.filter(x=>x!=='${h.replace(/'/g,"\\'")}');localStorage.setItem('searchHistory',JSON.stringify(_searchHistory));_showSearchHistory()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;flex-shrink:0;padding:2px">✕</button>
+  </div>`).join('');
+}
+
+function _hideSearchHistory(){
+  const box=document.getElementById('searchHistoryDrop');
+  if(box) box.style.display='none';
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const inp=document.getElementById('globalSearchInput');
+  if(inp){
+    inp.addEventListener('focus',()=>_showSearchHistory());
+    inp.addEventListener('input',()=>_showSearchHistory());
+    document.addEventListener('click',e=>{
+      if(!e.target.closest('.nav-search-wrap')) _hideSearchHistory();
+    });
+  }
+});
+
+/* ===== DM (Private Message) ===== */
+let _dmConvId=null, _dmPeer=null, _dmPollTimer=null;
+let _dmHideTimer=null, _dmPinned=false;
+
+function _dmShow(){
+  clearTimeout(_dmHideTimer);
+  const w=document.getElementById('dmWrap');
+  if(w) w.classList.add('dm-open');
+}
+function _dmHide(delay){
+  clearTimeout(_dmHideTimer);
+  if(_dmPinned) return;
+  _dmHideTimer=setTimeout(()=>{
+    const w=document.getElementById('dmWrap');
+    if(w) w.classList.remove('dm-open');
+  }, delay||200);
+}
+function _dmPin(){_dmPinned=true;_dmShow();}
+function _dmUnpin(){_dmPinned=false;_dmHide(300);}
+
+function dmInit(){
+  const wrap=document.getElementById('dmWrap');
+  if(!wrap) return;
+  if(APP.user){
+    wrap.style.display='';
+    dmLoadConvs();
+    if(_dmPollTimer) clearInterval(_dmPollTimer);
+    _dmPollTimer=setInterval(dmPollUnread,30000);
+
+    wrap.addEventListener('mouseenter',()=>_dmShow());
+    wrap.addEventListener('mouseleave',()=>_dmHide(250));
+
+    const trigger=document.getElementById('dmTrigger');
+    if(trigger) trigger.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      if(wrap.classList.contains('dm-open')&&_dmPinned){_dmUnpin();wrap.classList.remove('dm-open');}
+      else _dmPin();
+    });
+
+    document.addEventListener('click',(e)=>{
+      if(_dmPinned&&!e.target.closest('.dm-wrap')){_dmUnpin();wrap.classList.remove('dm-open');}
+    });
+  } else {
+    wrap.style.display='none';
+  }
+}
+
+async function dmPollUnread(){
+  if(!APP.token) return;
+  try{
+    const r=await APP.api('GET','/api/dm/unread');
+    const b=document.getElementById('dmBadge');
+    if(r.unread>0){b.textContent=r.unread>99?'99+':r.unread;b.style.display=''}
+    else{b.style.display='none'}
+  }catch{}
+}
+
+async function dmLoadConvs(){
+  if(!APP.token) return;
+  try{
+    const r=await APP.api('GET','/api/dm/conversations');
+    const list=document.getElementById('dmConvList');
+    const b=document.getElementById('dmBadge');
+    if(r.total_unread>0){b.textContent=r.total_unread>99?'99+':r.total_unread;b.style.display=''}
+    else{b.style.display='none'}
+    if(!r.conversations.length){
+      list.innerHTML='';
+      const _de=document.createElement('div');
+      _de.className='dm-empty';
+      _de.style.cssText='padding:24px 12px;font-size:12px;white-space:pre-line';
+      _de.textContent=I18N.t('dm.empty');
+      list.appendChild(_de);
+      return;
+    }
+    list.innerHTML=r.conversations.map(c=>{
+      const p=c.peer;
+      const av=p.avatar_url?`<img src="${p.avatar_url}">`:`<span>${(p.display_name||p.username)[0].toUpperCase()}</span>`;
+      const time=c.last_at?APP.timeAgo(c.last_at):'';
+      const isActive=_dmConvId===c.id;
+      return `<div class="dm-conv-item${isActive?' active':''}" data-conv-id="${c.id}" onclick="dmOpenChat(${c.id},'${p.id}','${(p.display_name||p.username).replace(/'/g,"\\'")}','${p.avatar_url||''}')">
+        <div class="dm-conv-avatar">${av}</div>
+        <div class="dm-conv-body"><div class="dm-conv-name">${p.display_name||p.username}</div><div class="dm-conv-last">${c.last_message.replace(/</g,'&lt;')}</div></div>
+        <div class="dm-conv-meta"><span class="dm-conv-time">${time}</span>${c.unread?`<span class="dm-conv-unread">${c.unread}</span>`:''}</div>
+      </div>`;
+    }).join('');
+  }catch{}
+}
+
+async function dmOpenChat(convId,peerId,peerName,peerAvatar){
+  _dmConvId=convId;_dmPeer={id:peerId,name:peerName,avatar:peerAvatar};
+  const empty=document.getElementById('dmMainEmpty');
+  if(empty) empty.style.display='none';
+  const chat=document.getElementById('dmChat');
+  chat.style.display='flex';
+  document.getElementById('dmChatPeer').textContent=peerName;
+  document.getElementById('dmChatInput').value='';
+  document.querySelectorAll('.dm-conv-item').forEach(el=>{
+    el.classList.toggle('active',el.dataset.convId==convId);
+  });
+  await dmLoadMessages();
+  document.getElementById('dmChatInput').focus();
+}
+
+async function dmLoadMessages(){
+  if(!_dmConvId) return;
+  try{
+    const r=await APP.api('GET',`/api/dm/conversations/${_dmConvId}/messages?limit=50`);
+    const box=document.getElementById('dmChatMessages');
+    if(!r.messages.length){
+      box.innerHTML='';
+      const _me=document.createElement('div');
+      _me.className='dm-empty';
+      _me.style.padding='20px';
+      _me.textContent=I18N.t('dm.start_chat');
+      box.appendChild(_me);
+      return;
+    }
+    box.innerHTML=r.messages.map(m=>{
+      const cls=m.sender_id===APP.user.id?'sent':'received';
+      return `<div class="dm-msg ${cls}"><div>${m.content.replace(/</g,'&lt;')}</div><div class="dm-msg-time">${APP.timeAgo(m.created_at)}</div></div>`;
+    }).join('');
+    box.scrollTop=box.scrollHeight;
+  }catch{}
+}
+
+async function dmSendMsg(){
+  const inp=document.getElementById('dmChatInput');
+  const txt=inp.value.trim();
+  if(!txt||!_dmConvId) return;
+  inp.value='';
+  try{
+    await APP.api('POST',`/api/dm/conversations/${_dmConvId}/send`,{content:txt});
+    await dmLoadMessages();
+  }catch(e){alert(e.message)}
+}
+
+let _dmSearchTimer=null;
+function _dmNormalizeSearchQ(s){
+  let t=String(s||'').trim();
+  if(!t) return '';
+  const m=t.match(/^(?:id|ID)\s*[:：]\s*(.+)$/);
+  if(m) t=m[1].trim();
+  return t.replace(/[\u200B-\u200D\uFEFF\u00A0]/g,'').trim();
+}
+function dmSearchUser(q){
+  clearTimeout(_dmSearchTimer);
+  const box=document.getElementById('dmSearchResults');
+  const convList=document.getElementById('dmConvList');
+  q=_dmNormalizeSearchQ(q);
+  if(!q){box.style.display='none';convList.style.display='';return}
+  _dmSearchTimer=setTimeout(async()=>{
+    try{
+      const r=await APP.api('GET','/api/dm/search-user?q='+encodeURIComponent(q));
+      if(!r.users.length){
+        box.innerHTML='';
+        const _ne=document.createElement('div');
+        _ne.className='dm-empty';
+        _ne.style.cssText='padding:16px;font-size:12px';
+        _ne.textContent=I18N.t('dm.user_not_found');
+        box.appendChild(_ne);
+        box.style.display='';
+        convList.style.display='none';
+        return;
+      }
+      box.innerHTML=r.users.map(u=>{
+        const av=u.avatar_url?`<img src="${u.avatar_url}">`:`<span>${(u.display_name||u.username)[0].toUpperCase()}</span>`;
+        return `<div class="dm-sr-item" onclick="dmStartChat('${u.id}','${(u.display_name||u.username).replace(/'/g,"\\'")}')">
+          <div class="dm-sr-avatar">${av}</div>
+          <div class="dm-sr-info"><div class="dm-sr-name">${u.display_name||u.username}</div><div class="dm-sr-id">@${u.username}${u.display_id?' · ID:'+u.display_id:''}</div></div>
+        </div>`;
+      }).join('');
+      box.style.display='';convList.style.display='none';
+    }catch{}
+  },300);
+}
+
+async function dmStartChat(peerId,peerName){
+  if(!APP.token){alert(I18N.t('common.login_first_alert'));return}
+  try{
+    const r=await APP.api('POST','/api/dm/start',{peer_id:peerId,content:''});
+    const wrap=document.getElementById('dmWrap');
+    if(wrap) wrap.style.display='';
+    _dmPin();
+    document.getElementById('dmSearchInput').value='';
+    document.getElementById('dmSearchResults').style.display='none';
+    document.getElementById('dmConvList').style.display='';
+    await dmLoadConvs();
+    dmOpenChat(r.conversation_id,peerId,peerName,'');
+  }catch(e){alert(e.message)}
+}
+
+const _origAppInit=APP.init.bind(APP);
+APP.init=async function(){
+  await _origAppInit();
+  dmInit();
+};
+
+document.addEventListener('i18n-changed',()=>{
+  const sd=document.getElementById('searchHistoryDrop');
+  if(sd&&sd.style.display!=='none'&&typeof _showSearchHistory==='function') _showSearchHistory();
+  if(APP.token){
+    if(typeof dmLoadConvs==='function') dmLoadConvs();
+    if(typeof _dmConvId!=='undefined'&&_dmConvId&&typeof dmLoadMessages==='function') dmLoadMessages();
+  }
+  const dmsi=document.getElementById('dmSearchInput');
+  if(dmsi&&dmsi.value.trim()&&typeof dmSearchUser==='function') dmSearchUser(dmsi.value);
+});
+
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

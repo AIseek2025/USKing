@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}动态 — 美股王{% endblock %}
+{% block head %}
+<style>
+.ex-wrap{position:fixed;top:0;left:0;right:0;bottom:0;z-index:800;background:#000;overflow:hidden}
+.ex-track{width:100%;height:100%;position:relative;transition:transform .35s cubic-bezier(.4,0,.2,1);will-change:transform}
+.ex-slide{position:absolute;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.ex-slide img{max-width:100%;max-height:100%;object-fit:contain;user-select:none;-webkit-user-drag:none}
+.ex-close{position:fixed;top:14px;left:16px;z-index:820;background:rgba(255,255,255,.1);border:none;color:#fff;font-size:14px;padding:8px 16px;border-radius:20px;cursor:pointer;backdrop-filter:blur(4px);display:flex;align-items:center;gap:6px;text-decoration:none}
+.ex-close:hover{background:rgba(255,255,255,.2);color:#fff}
+.ex-counter{position:fixed;top:14px;right:16px;z-index:820;color:rgba(255,255,255,.4);font-size:11px;font-family:var(--font-mono)}
+.ex-loading{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:rgba(255,255,255,.4);font-size:14px;z-index:805}
+.ex-actions{position:fixed;right:14px;bottom:130px;z-index:815;display:flex;flex-direction:column;align-items:center;gap:16px}
+.ex-ab{display:flex;flex-direction:column;align-items:center;gap:2px;color:#fff;background:none;border:none;cursor:pointer;font-size:11px}
+.ex-ab svg{width:30px;height:30px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+.ex-ab:hover svg{transform:scale(1.12)}
+.ex-av-btn{width:44px;height:44px;border-radius:50%;border:2px solid #fff;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg3,#2c2c2c);cursor:pointer;margin-bottom:6px;text-decoration:none}
+.ex-av-btn img{width:100%;height:100%;object-fit:cover}
+.ex-info{position:fixed;bottom:0;left:0;right:70px;z-index:815;background:linear-gradient(transparent,rgba(0,0,0,.45) 70%);padding:16px 20px;pointer-events:none}
+.ex-info *{pointer-events:auto}
+.ex-info-name{color:#fff;font-size:16px;font-weight:700;margin-bottom:4px;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.ex-info-cap{color:rgba(255,255,255,.9);font-size:13px;line-height:1.5;max-height:42px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ex-info-time{color:rgba(255,255,255,.45);font-size:11px;margin-top:3px}
+
+/* Video player */
+.ex-vp{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#000}
+.ex-vp video{max-width:100%;max-height:100%;object-fit:contain}
+.ex-vp-big{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.12);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .2s;backdrop-filter:blur(4px)}
+.ex-vp-big.show{opacity:1}
+.ex-vp-big svg{width:26px;height:26px}
+.ex-vp-bar{position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.15);cursor:pointer;z-index:5}
+.ex-vp-bar-fill{height:100%;background:var(--accent);width:0%;border-radius:0 2px 2px 0}
+.ex-vp-bar:hover{height:6px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="ex-wrap" id="exWrap">
+  <a href="/" class="ex-close">← 首页</a>
+  <div class="ex-counter" id="exCounter"></div>
+  <div class="ex-track" id="exTrack"></div>
+  <div class="ex-actions" id="exActions"></div>
+  <div class="ex-info" id="exInfo"></div>
+  <div class="ex-loading" id="exLoading">加载中...</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let exItems=[],exIdx=0,exOffset=0,exLoading=false,exVS=0;
+
+function exBuildVP(url){
+  return `<div class="ex-vp">
+    <video src="${url}" playsinline preload="metadata" loop></video>
+    <button class="ex-vp-big" onclick="var v=this.closest('.ex-vp').querySelector('video');v.paused?v.play():v.pause()"><svg viewBox="0 0 24 24" fill="#fff"><polygon points="8 5 19 12 8 19"/></svg></button>
+    <div class="ex-vp-bar" onmousedown="exSeek(event,this)"><div class="ex-vp-bar-fill"></div></div>
+  </div>`;
+}
+function exSeek(e,bar){
+  const v=bar.closest('.ex-vp')?.querySelector('video');if(!v||!v.duration)return;
+  const rect=bar.getBoundingClientRect();
+  const set=ev=>{v.currentTime=Math.max(0,Math.min(1,(ev.clientX-rect.left)/rect.width))*v.duration};
+  set(e);
+  const onM=ev=>set(ev),onU=()=>{document.removeEventListener('mousemove',onM);document.removeEventListener('mouseup',onU)};
+  document.addEventListener('mousemove',onM);document.addEventListener('mouseup',onU);
+}
+setInterval(()=>{
+  const s=document.getElementById('exTrack')?.children[exIdx];if(!s)return;
+  const v=s.querySelector('video');if(!v)return;
+  const vp=s.querySelector('.ex-vp');if(!vp)return;
+  const f=vp.querySelector('.ex-vp-bar-fill'),bp=vp.querySelector('.ex-vp-big');
+  if(f&&v.duration)f.style.width=(v.currentTime/v.duration*100)+'%';
+  if(bp){bp.classList.toggle('show',v.paused);bp.innerHTML=v.paused?'<svg viewBox="0 0 24 24" fill="#fff" width="26" height="26"><polygon points="8 5 19 12 8 19"/></svg>':'<svg viewBox="0 0 24 24" fill="#fff" width="26" height="26"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>'}
+},200);
+
+async function exLoadMore(){
+  if(exLoading)return;exLoading=true;
+  try{
+    const r=await APP.api('GET',`/api/explore/feed?limit=20&offset=${exOffset}`);
+    const items=r.items||[];
+    if(!items.length){if(!exItems.length)document.getElementById('exLoading').textContent='暂无动态';exLoading=false;return}
+    exOffset+=items.length;const si=exItems.length;exItems.push(...items);
+    const track=document.getElementById('exTrack');
+    for(let i=si;i<exItems.length;i++){const m=exItems[i],d=document.createElement('div');d.className='ex-slide';d.style.top=`${i*100}%`;d.innerHTML=m.media_type==='video'?exBuildVP(m.media_url):`<img src="${m.media_url}" draggable="false">`;track.appendChild(d)}
+    if(si===0){document.getElementById('exLoading').style.display='none';exShow(0)}
+  }catch{document.getElementById('exLoading').textContent='加载失败'}
+  exLoading=false;
+}
+
+function exShow(idx){
+  idx=Math.max(0,Math.min(idx,exItems.length-1));
+  if(exItems.length>0&&exVS>0){const p=exItems[exIdx];APP.api('POST','/api/explore/engage',{media_id:p.id,watch_ms:Date.now()-exVS,completed:p.media_type==='image'?(Date.now()-exVS)>2000:false}).catch(()=>{})}
+  exIdx=idx;exVS=Date.now();
+  document.getElementById('exTrack').style.transform=`translateY(-${idx*100}%)`;
+  document.querySelectorAll('#exTrack video').forEach(v=>v.pause());
+  const cur=document.getElementById('exTrack').children[idx];
+  if(cur){const vid=cur.querySelector('video');if(vid){vid.volume=0.8;vid.play().catch(()=>{});if(!vid._t){vid._t=true;vid.addEventListener('ended',()=>{APP.api('POST','/api/explore/engage',{media_id:exItems[exIdx].id,watch_ms:Date.now()-exVS,completed:true}).catch(()=>{})});vid.addEventListener('play',()=>{const b=vid.closest('.ex-vp')?.querySelector('.ex-vp-big');if(b)b.classList.remove('show')});vid.addEventListener('pause',()=>{const b=vid.closest('.ex-vp')?.querySelector('.ex-vp-big');if(b)b.classList.add('show')})}}}
+  exUpdateUI();
+  if(idx>=exItems.length-5)exLoadMore();
+}
+
+function exUpdateUI(){
+  const m=exItems[exIdx];if(!m)return;const a=m.author||{};
+  const init=(a.display_name||a.username||'?')[0].toUpperCase();
+  const av=a.avatar_url?`<img src="${a.avatar_url}">`:`<span style="color:var(--accent);font-weight:700;font-size:15px">${init}</span>`;
+  document.getElementById('exInfo').innerHTML=`<div class="ex-info-name">@${a.display_name||a.username||''}</div>${m.caption?`<div class="ex-info-cap">${m.caption}</div>`:''}<div class="ex-info-time">${APP.timeAgo(m.created_at)}</div>`;
+  document.getElementById('exActions').innerHTML=`
+    <a href="/u/${a.username||''}" class="ex-av-btn">${av}</a>
+    <button class="ex-ab"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span>${m.impressions||0}</span></button>
+    <button class="ex-ab" onclick="exBk(${m.post_id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg><span>收藏</span></button>
+    <button class="ex-ab" onclick="if(navigator.share)navigator.share({title:'美股王',url:location.href}).catch(()=>{});else{navigator.clipboard?.writeText(location.href);alert('已复制')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span>分享</span></button>`;
+  document.getElementById('exCounter').textContent=`${exIdx+1}/${exItems.length}`;
+}
+async function exBk(pid){if(!APP.user){location.href='/login';return}try{const r=await APP.api('POST',`/api/posts/${pid}/bookmark`);const b=document.querySelector('#exActions .ex-ab:nth-child(3)');if(b){const s=b.querySelector('svg');if(r.bookmarked){s.setAttribute('fill','var(--accent)');s.setAttribute('stroke','var(--accent)');b.querySelector('span').textContent='已收藏'}else{s.setAttribute('fill','none');s.setAttribute('stroke','currentColor');b.querySelector('span').textContent='收藏'}}}catch{}}
+
+let exWL=false;
+document.getElementById('exTrack').addEventListener('wheel',e=>{if(e.target.closest('.ex-vp-bar'))return;e.preventDefault();if(exWL)return;if(Math.abs(e.deltaY)>20){exWL=true;exShow(exIdx+(e.deltaY>0?1:-1));setTimeout(()=>{exWL=false},400)}},{passive:false});
+(function(){const el=document.getElementById('exTrack');let sy=0,d=false;el.addEventListener('touchstart',e=>{sy=e.touches[0].clientY;d=true},{passive:true});el.addEventListener('touchend',e=>{if(!d)return;d=false;const dy=e.changedTouches[0].clientY-sy;if(Math.abs(dy)>50)exShow(exIdx+(dy<0?1:-1))},{passive:true})})();
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();exShow(exIdx+(e.key==='ArrowDown'?1:-1))}if(e.key===' '){e.preventDefault();const v=document.getElementById('exTrack')?.children[exIdx]?.querySelector('video');if(v)v.paused?v.play():v.pause()}});
+exLoadMore();
+</script>
+{% endblock %}

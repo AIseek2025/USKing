@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}登录 — 美股王{% endblock %}
+{% block content %}
+<div class="container" style="max-width:420px;padding-top:60px">
+  <div class="card">
+    <h2 style="text-align:center;margin-bottom:24px;font-size:20px" data-i18n="login.title">登录</h2>
+    <div class="tabs" style="justify-content:center">
+      <button class="tab active" onclick="switchLoginTab('username',this)" data-i18n="login.tab_user">用户名登录</button>
+      <button class="tab" onclick="switchLoginTab('email',this)" data-i18n="login.tab_email">邮箱登录</button>
+    </div>
+    <div id="loginUsername">
+      <div class="form-group"><label data-i18n="login.username">用户名</label><input class="form-input" id="lUser" data-i18n-ph="login.ph_user" placeholder="输入用户名"></div>
+    </div>
+    <div id="loginEmail" style="display:none">
+      <div class="form-group"><label data-i18n="login.email">邮箱</label><input class="form-input" id="lEmail" type="email" data-i18n-ph="login.ph_email" placeholder="输入邮箱"></div>
+    </div>
+    <div class="form-group"><label data-i18n="login.password">密码</label><input class="form-input" id="lPass" type="password" data-i18n-ph="login.ph_pass" placeholder="输入密码"></div>
+    <div id="loginErr" class="error-msg" style="display:none"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:8px" onclick="doLogin()" data-i18n="login.submit">登录</button>
+    <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)"><span data-i18n="login.no_account">还没有账户？</span><a href="/register" data-i18n="login.go_register">立即注册</a></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let loginMode='username';
+function switchLoginTab(mode,el){
+  loginMode=mode;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('loginUsername').style.display=mode==='username'?'':'none';
+  document.getElementById('loginEmail').style.display=mode==='email'?'':'none';
+}
+async function doLogin(){
+  const err=document.getElementById('loginErr');
+  err.style.display='none';
+  const body={password:document.getElementById('lPass').value};
+  if(loginMode==='username')body.username=document.getElementById('lUser').value;
+  else body.email=document.getElementById('lEmail').value;
+  try{
+    const r=await APP.api('POST','/api/auth/login',body);
+    APP.setToken(r.token);
+    APP.user=r.user;
+    location.href='/';
+  }catch(e){err.textContent=e.message;err.style.display='block';}
+}
+</script>
+{% endblock %}

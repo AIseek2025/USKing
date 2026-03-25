@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}直播后台 — 美股王{% endblock %}
+{% block content %}
+<div class="container" style="padding-top:24px;max-width:800px">
+  <h2 style="margin-bottom:20px" data-i18n="dash.title">直播后台</h2>
+  <div id="dashContent">
+    <div class="empty-state"><p><span data-i18n="dash.login_first">请先登录后使用直播功能</span> <a href="/login" data-i18n="nav.login">登录</a></p></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function initDash(){
+  await APP.init();
+  if(!APP.user){return;}
+  const el=document.getElementById('dashContent');
+  el.innerHTML=`
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h3 style="font-size:16px">${I18N.t('dash.start')}</h3>
+          <p style="font-size:12px;color:var(--text3);margin-top:4px">${I18N.t('dash.stream_link')}<a href="/live/${APP.user.username}" target="_blank">/live/${APP.user.username}</a></p>
+        </div>
+        <span id="liveStatus" class="badge badge-gray">${I18N.t('dash.status_off')}</span>
+      </div>
+      <div class="form-group"><label>${I18N.t('dash.stream_title')}</label><input class="form-input" id="streamTitle" placeholder="${I18N.t('dash.ph_title')}" value="${APP.user.display_name||APP.user.username}"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary" id="btnStart" onclick="startStream()">${I18N.t('dash.btn_start')}</button>
+        <button class="btn btn-danger" id="btnStop" onclick="stopStream()" style="display:none">${I18N.t('dash.btn_stop')}</button>
+        <a href="/app/live.html" target="_blank" class="btn btn-ghost">${I18N.t('dash.btn_capture')}</a>
+      </div>
+      <div id="liveErr" class="error-msg" style="display:none;margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h3 style="font-size:16px;margin-bottom:12px">${I18N.t('dash.share')}</h3>
+      <div class="form-row">
+        <div class="form-group" style="margin:0;flex:1"><input class="form-input" readonly id="shareLink" value="${location.origin}/live/${APP.user.username}"></div>
+        <button class="btn btn-ghost btn-sm" onclick="copyLink()" style="height:42px;white-space:nowrap">${I18N.t('dash.copy')}</button>
+      </div>
+    </div>`;
+  checkLiveStatus();
+}
+
+async function checkLiveStatus(){
+  try{
+    const r=await APP.api('GET',`/api/live/user/${APP.user.username}`);
+    if(r.stream&&r.stream.is_live){
+      document.getElementById('liveStatus').className='badge badge-red';
+      document.getElementById('liveStatus').textContent=I18N.t('dash.status_on');
+      document.getElementById('btnStart').style.display='none';
+      document.getElementById('btnStop').style.display='';
+    }
+  }catch{}
+}
+
+async function startStream(){
+  const err=document.getElementById('liveErr');err.style.display='none';
+  try{
+    await APP.api('POST','/api/live/start',{title:document.getElementById('streamTitle').value});
+    document.getElementById('liveStatus').className='badge badge-red';
+    document.getElementById('liveStatus').textContent=I18N.t('dash.status_on');
+    document.getElementById('btnStart').style.display='none';
+    document.getElementById('btnStop').style.display='';
+  }catch(e){err.textContent=e.message;err.style.display='block';}
+}
+
+async function stopStream(){
+  await APP.api('POST','/api/live/stop');
+  document.getElementById('liveStatus').className='badge badge-gray';
+  document.getElementById('liveStatus').textContent=I18N.t('dash.status_off');
+  document.getElementById('btnStart').style.display='';
+  document.getElementById('btnStop').style.display='none';
+}
+
+function copyLink(){
+  navigator.clipboard.writeText(document.getElementById('shareLink').value);
+  alert(I18N.t('common.copied'));
+}
+
+initDash();
+</script>
+{% endblock %}

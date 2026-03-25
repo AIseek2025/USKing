@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}课程专辑 — 美股王{% endblock %}
+{% block content %}
+
+<div class="about-hero" style="padding:40px 0">
+  <div class="container" style="text-align:center">
+    <h1 style="font-size:32px;font-weight:800;color:#1a1200">📚 美股王课程专辑</h1>
+    <p style="color:#5a4a10;margin-top:8px;font-size:15px">从入门到进阶，完整的美股交易课程体系</p>
+  </div>
+</div>
+
+<div class="container" style="padding-top:24px">
+  <div id="courseList">
+    <div class="empty-state"><p>加载中...</p></div>
+  </div>
+</div>
+
+<div style="height:60px"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function loadCourses(){
+  try{
+    const r=await APP.api('GET','/api/albums');
+    const el=document.getElementById('courseList');
+    const albums=r.albums||[];
+    if(!albums.length){
+      el.innerHTML=`<div class="empty-state"><p>暂无课程</p></div>`;
+      return;
+    }
+    el.innerHTML=albums.map(a=>`
+      <div class="card" style="margin-bottom:24px;padding:24px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+          <div>
+            <h2 style="font-size:20px;margin-bottom:8px;color:var(--gold)">${a.title}</h2>
+            <p style="font-size:13px;white-space:pre-line;line-height:1.7">${a.description||''}</p>
+          </div>
+          <span class="badge badge-yellow" style="font-size:12px;padding:4px 12px;flex-shrink:0">${a.video_count} 节课</span>
+        </div>
+        <div class="stream-grid">
+          ${(a.videos||[]).map((v,i)=>`
+            <a href="${v.video_url}" target="_blank" class="stream-card" style="color:inherit;text-decoration:none" onclick="trackCourseView(${v.id})">
+              <div class="stream-thumb" style="aspect-ratio:16/9">
+                <div class="play-icon"><svg viewBox="0 0 24 24" fill="none"><polygon points="9 6 18 12 9 18" fill="#1a1200"/></svg></div>
+                <div style="position:absolute;top:8px;left:8px;padding:2px 8px;border-radius:12px;background:var(--gold);color:#1a1200;font-size:10px;font-weight:700">第${i+1}节</div>
+                <div style="position:absolute;top:8px;right:8px;padding:2px 8px;border-radius:12px;background:rgba(26,18,0,.6);color:var(--white);font-size:11px;font-family:var(--font-mono)">▶ ${v.view_count}</div>
+              </div>
+              <div class="stream-info">
+                <div class="si-title">${v.title}</div>
+                <div class="si-user" style="color:var(--gold);font-size:11px">点击观看课程</div>
+              </div>
+            </a>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  }catch(e){
+    document.getElementById('courseList').innerHTML=`<div class="empty-state"><p>加载失败</p></div>`;
+  }
+}
+
+function trackCourseView(id){
+  APP.api('POST',`/api/videos/${id}/view`).catch(()=>{});
+}
+
+loadCourses();
+</script>
+{% endblock %}

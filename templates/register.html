@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}注册 — 美股王{% endblock %}
+{% block content %}
+<div class="container" style="max-width:460px;padding-top:60px">
+  <div class="card">
+    <h2 style="text-align:center;margin-bottom:24px;font-size:20px" data-i18n="reg.title">创建账户</h2>
+    <div class="tabs" style="justify-content:center">
+      <button class="tab active" onclick="switchRegTab('simple',this)" data-i18n="reg.tab_simple">用户名注册</button>
+      <button class="tab" onclick="switchRegTab('email',this)" data-i18n="reg.tab_email">邮箱注册</button>
+    </div>
+    <div class="form-group"><label><span data-i18n="reg.username">用户名</span> <span style="color:var(--text3);font-weight:400" data-i18n="reg.user_hint">（登录用，至少3个字符）</span></label><input class="form-input" id="rUser" data-i18n-ph="reg.ph_user" placeholder="输入用户名"></div>
+    <div class="form-group"><label><span data-i18n="reg.password">密码</span> <span style="color:var(--text3);font-weight:400" data-i18n="reg.pass_hint">（至少6个字符）</span></label><input class="form-input" id="rPass" type="password" data-i18n-ph="reg.ph_pass" placeholder="输入密码"></div>
+    <div id="emailFields" style="display:none">
+      <div class="form-group"><label data-i18n="reg.email">邮箱</label>
+        <div class="form-row">
+          <div class="form-group" style="margin:0"><input class="form-input" id="rEmail" type="email" data-i18n-ph="reg.ph_email" placeholder="输入邮箱"></div>
+          <button class="btn btn-ghost btn-sm" onclick="sendCode()" id="sendCodeBtn" style="white-space:nowrap;height:42px" data-i18n="reg.send_code">发送验证码</button>
+        </div>
+      </div>
+      <div class="form-group"><label data-i18n="reg.code">验证码</label><input class="form-input" id="rCode" data-i18n-ph="reg.ph_code" placeholder="输入6位验证码"></div>
+    </div>
+    <div id="regErr" class="error-msg" style="display:none"></div>
+    <div id="regOk" class="success-msg" style="display:none"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:8px" onclick="doRegister()" data-i18n="reg.submit">注册</button>
+    <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--text3)"><span data-i18n="reg.has_account">已有账户？</span><a href="/login" data-i18n="reg.go_login">立即登录</a></p>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let regMode='simple';
+function switchRegTab(mode,el){
+  regMode=mode;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('emailFields').style.display=mode==='email'?'':'none';
+}
+async function sendCode(){
+  const email=document.getElementById('rEmail').value;
+  if(!email){alert(I18N.t('reg.ph_email'));return;}
+  const btn=document.getElementById('sendCodeBtn');
+  btn.disabled=true;btn.textContent='...';
+  try{
+    const r=await APP.api('POST','/api/auth/send-code',{email,purpose:'register'});
+    btn.textContent='✓';
+    if(r.dev_code)document.getElementById('rCode').value=r.dev_code;
+    let cd=60;
+    const t=setInterval(()=>{cd--;btn.textContent=cd+'s';if(cd<=0){clearInterval(t);btn.textContent=I18N.t('reg.send_code');btn.disabled=false;}},1000);
+  }catch(e){btn.textContent=I18N.t('reg.send_code');btn.disabled=false;alert(e.message);}
+}
+async function doRegister(){
+  const err=document.getElementById('regErr');
+  err.style.display='none';
+  const body={username:document.getElementById('rUser').value,password:document.getElementById('rPass').value};
+  if(regMode==='email'){
+    body.email=document.getElementById('rEmail').value;
+    body.email_code=document.getElementById('rCode').value;
+  }
+  try{
+    const r=await APP.api('POST','/api/auth/register',body);
+    APP.setToken(r.token);
+    APP.user=r.user;
+    location.href='/';
+  }catch(e){err.textContent=e.message;err.style.display='block';}
+}
+</script>
+{% endblock %}
