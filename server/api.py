@@ -1554,16 +1554,25 @@ def dm_unread(user: User = Depends(require_user), db: Session = Depends(get_db))
 
 # --------------- Helpers ---------------
 
+def _dt_iso(dt) -> Optional[str]:
+    """避免 SQLite/迁移导致时间为 None 或非 datetime 时 .isoformat() 抛错（直播页等接口 500）。"""
+    if dt is None:
+        return None
+    if isinstance(dt, datetime):
+        return dt.isoformat()
+    return str(dt)
+
+
 def _user_dict(u: User, admin: bool = False) -> dict:
     d = {
         "id": u.id, "username": u.username, "display_name": u.display_name,
-        "display_id": str(u.display_id).zfill(8) if u.display_id else None,
+        "display_id": str(u.display_id).zfill(8) if u.display_id is not None else None,
         "avatar_url": u.avatar_url, "bio": u.bio,
         "gender": u.gender or "", "birthday": u.birthday or "",
         "cover_url": u.cover_url or "",
         "location": u.location, "website": u.website, "is_member": u.is_member,
-        "member_until": u.member_until.isoformat() if u.member_until else None,
-        "created_at": u.created_at.isoformat(),
+        "member_until": _dt_iso(u.member_until),
+        "created_at": _dt_iso(u.created_at),
     }
     if admin:
         d.update({
@@ -1581,7 +1590,7 @@ def _post_dict(p: Post, author: User = None, admin: bool = False, bookmarked: bo
         "view_count": p.view_count or 0,
         "like_count": p.like_count or 0,
         "bookmarked": bookmarked,
-        "created_at": p.created_at.isoformat(),
+        "created_at": _dt_iso(p.created_at),
         "author": _user_dict(author) if author else None,
     }
     if admin:
@@ -1593,5 +1602,5 @@ def _stream_dict(s: LiveStream) -> dict:
     return {
         "id": s.id, "user_id": s.user_id, "title": s.title,
         "is_live": s.is_live, "viewer_count": s.viewer_count,
-        "started_at": s.started_at.isoformat() if s.started_at else None,
+        "started_at": _dt_iso(s.started_at),
     }

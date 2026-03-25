@@ -264,11 +264,11 @@ async def register_page(request: Request):
 
 @app.get("/u/{username}", response_class=HTMLResponse)
 async def user_profile_page(request: Request, username: str):
-    return templates.TemplateResponse("profile.html", {"request": request, "username": username})
+    return templates.TemplateResponse(request, "profile.html", {"username": username})
 
 @app.get("/live/{username}", response_class=HTMLResponse)
 async def watch_live(request: Request, username: str):
-    return templates.TemplateResponse("watch.html", {"request": request, "username": username})
+    return templates.TemplateResponse(request, "watch.html", {"username": username})
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
