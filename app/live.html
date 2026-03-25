@@ -559,6 +559,16 @@ function ensureStreamCanvas() {
   }
 }
 
+/** 主站登录只存 localStorage token；与 APP.api 一致须带 Bearer，不能仅靠 Cookie */
+function pushFrameAuthHeaders() {
+  const h = { 'Content-Type': 'image/jpeg' };
+  try {
+    const t = localStorage.getItem('token');
+    if (t) h['Authorization'] = 'Bearer ' + t;
+  } catch (e) {}
+  return h;
+}
+
 function startFramePushToSite() {
   ensureStreamCanvas();
   if (framePushTimer) clearInterval(framePushTimer);
@@ -577,7 +587,7 @@ function startFramePushToSite() {
           fetch(location.origin + '/api/live/push-frame', {
             method: 'POST',
             credentials: 'include',
-            headers: { 'Content-Type': 'image/jpeg' },
+            headers: pushFrameAuthHeaders(),
             body: buf,
           })
         )
