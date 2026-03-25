@@ -132,6 +132,10 @@ const I18N = {
     'dash.layout_grid': { zh: '网格', en: 'Grid' },
     'dash.plat_custom': { zh: '自定义', en: 'Custom' },
     'dash.fps_label': { zh: ' fps', en: ' fps' },
+    'dash.push_login_expired': {
+      zh: '登录已失效，请刷新页面重新登录后再开播。',
+      en: 'Session expired. Refresh, sign in again, then go live.',
+    },
 
     // === Watch ===
     'watch.loading': { zh: '暂无实时播放画面', en: 'No live video feed yet' },

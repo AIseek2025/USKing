@@ -801,6 +801,8 @@ async function initDashboard(){
       document.getElementById('liveStatus').textContent=_t('dash.status_on');
       document.getElementById('btnStart').style.display='none';
       document.getElementById('btnStop').style.display='';
+      _dLive=true;
+      dashStartFramePushToSite();
     }
   }catch{}
   dashRefreshI18n();
@@ -832,6 +834,7 @@ function dashRefreshI18n(){
 
 /* Capture engine (embedded) */
 let _dSources=[], _dRAF=null, _dLayout='auto', _dLive=false, _dStart=0, _dTimerInt=null;
+let _dFramePushTimer=null, _dFramePushInFlight=false, _dStreamCanvas=null, _dStreamCtx=null;
 const _dLAYOUTS={
   single:{cells:n=>[{x:0,y:0,w:1,h:1}]},
   sideBySide:{cells:n=>[{x:0,y:0,w:.5,h:1},{x:.5,y:0,w:.5,h:1}]},
@@ -1017,6 +1020,39 @@ function dashStopComposite(){if(_dRAF){cancelAnimationFrame(_dRAF);_dRAF=null}}
 function _dRR(ctx,x,y,w,h,r){ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r)}
 function _dRRF(ctx,x,y,w,h,r){ctx.beginPath();_dRR(ctx,x,y,w,h,r);ctx.fill()}
 
+function dashEnsureStreamCanvas(){
+  if(!_dStreamCanvas){
+    _dStreamCanvas=document.createElement('canvas');
+    _dStreamCanvas.width=960;_dStreamCanvas.height=540;
+    _dStreamCtx=_dStreamCanvas.getContext('2d');
+  }
+}
+/** 与 /app/live.html 一致：站内观众靠 POST push-frame 收画面（SPA 后台也必须推） */
+function dashStartFramePushToSite(){
+  dashEnsureStreamCanvas();
+  if(_dFramePushTimer)clearInterval(_dFramePushTimer);
+  _dFramePushInFlight=false;
+  _dFramePushTimer=setInterval(()=>{
+    if(!_dLive||!_dSources.length||_dFramePushInFlight)return;
+    const cv=document.getElementById('dashCanvas');
+    if(!cv||!cv.width)return;
+    try{_dStreamCtx.drawImage(cv,0,0,960,540)}catch(e){return}
+    _dStreamCanvas.toBlob((blob)=>{
+      if(!blob||!_dLive)return;
+      _dFramePushInFlight=true;
+      blob.arrayBuffer()
+        .then((buf)=>fetch(location.origin+'/api/live/push-frame',{method:'POST',credentials:'include',headers:{'Content-Type':'image/jpeg'},body:buf}))
+        .then((res)=>{if(res.status===401)alert(_t('dash.push_login_expired'))})
+        .catch(()=>{})
+        .finally(()=>{_dFramePushInFlight=false});
+    },'image/jpeg',0.72);
+  },120);
+}
+function dashStopFramePushToSite(){
+  if(_dFramePushTimer){clearInterval(_dFramePushTimer);_dFramePushTimer=null}
+  _dFramePushInFlight=false;
+}
+
 async function startStream(){
   const err=document.getElementById('liveErr');if(err)err.style.display='none';
   try{
@@ -1025,9 +1061,13 @@ async function startStream(){
     document.getElementById('liveStatus').textContent=_t('dash.status_on');
     document.getElementById('btnStart').style.display='none';
     document.getElementById('btnStop').style.display='';
+    _dLive=true;
+    dashStartFramePushToSite();
   }catch(e){if(err){err.textContent=e.message;err.style.display='block'}}
 }
 async function stopStream(){
+  _dLive=false;
+  dashStopFramePushToSite();
   await APP.api('POST','/api/live/stop');
   document.getElementById('liveStatus').className='badge badge-gray';
   document.getElementById('liveStatus').textContent=_t('dash.status_off');
