@@ -253,7 +253,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
       <button class="btn-live ready" id="btnLive" disabled onclick="toggleLive()">
         <span class="rec-dot"></span> 开始直播
       </button>
-      <p class="hint">添加至少一个窗口后即可开播</p>
+      <p class="hint">添加至少一个窗口后点击开始直播：画面将同步给站内 /live 观众（请保持本页打开）。</p>
     </div>
   </div>
 </div>
@@ -296,6 +296,11 @@ let timerInterval = null;
 let currentLayout = 'auto';
 let mediaRecorder = null;
 let recordedChunks = [];
+/** 站内直播：推 JPEG 到 /api/ws/live/publish */
+let publishWs = null;
+let framePushTimer = null;
+let streamCanvas = null;
+let streamCtx = null;
 
 const canvas = document.getElementById('compositeCanvas');
 const ctx = canvas.getContext('2d');
@@ -545,15 +550,108 @@ function roundRectFill(ctx, x, y, w, h, r) {
   ctx.fill();
 }
 
-function toggleLive() {
-  isLive = !isLive;
+function ensureStreamCanvas() {
+  if (!streamCanvas) {
+    streamCanvas = document.createElement('canvas');
+    streamCanvas.width = 960;
+    streamCanvas.height = 540;
+    streamCtx = streamCanvas.getContext('2d');
+  }
+}
+
+function startFramePushToSite() {
+  ensureStreamCanvas();
+  if (framePushTimer) clearInterval(framePushTimer);
+  framePushTimer = setInterval(() => {
+    if (!publishWs || publishWs.readyState !== WebSocket.OPEN) return;
+    if (sources.length === 0) return;
+    try {
+      streamCtx.drawImage(canvas, 0, 0, 960, 540);
+    } catch (e) { return; }
+    streamCanvas.toBlob((blob) => {
+      if (!blob || !publishWs || publishWs.readyState !== WebSocket.OPEN) return;
+      blob.arrayBuffer().then((buf) => {
+        try { publishWs.send(buf); } catch (e) {}
+      });
+    }, 'image/jpeg', 0.72);
+  }, 100);
+}
+
+function stopFramePushToSite() {
+  if (framePushTimer) {
+    clearInterval(framePushTimer);
+    framePushTimer = null;
+  }
+}
+
+function closePublishWs() {
+  stopFramePushToSite();
+  if (publishWs) {
+    try { publishWs.close(); } catch (e) {}
+    publishWs = null;
+  }
+}
+
+async function connectPublishWs() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${location.host}/api/ws/live/publish`;
+  const ws = new WebSocket(url);
+  publishWs = ws;
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const to = setTimeout(() => {
+      if (!settled) { settled = true; reject(new Error('timeout')); }
+    }, 12000);
+    ws.onopen = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(to);
+      resolve();
+    };
+    ws.onerror = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(to);
+      reject(new Error('ws'));
+    };
+    ws.onclose = (ev) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(to);
+      reject(new Error('close:' + ev.code));
+    };
+  });
+}
+
+async function toggleLive() {
   const btn = document.getElementById('btnLive');
   const badge = document.getElementById('badge');
   const badgeText = document.getElementById('badgeText');
   const stats = document.getElementById('statsSection');
   const recBorder = document.getElementById('recBorder');
 
-  if (isLive) {
+  if (!isLive) {
+    try {
+      const res = await fetch(location.origin + '/api/live/start', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ title: '美股王 · 交易直播' }),
+      });
+      if (!res.ok) {
+        let msg = 'HTTP ' + res.status;
+        try { const j = await res.json(); msg = j.detail || JSON.stringify(j); } catch (e) {}
+        alert('无法开始站内直播：' + msg + '\n请确认已登录且账号已开通直播权限。');
+        return;
+      }
+      await connectPublishWs();
+    } catch (e) {
+      console.error(e);
+      alert('连接直播通道失败：请确认已登录本站（同域名 Cookie），且已在数据库中开启直播权限。');
+      closePublishWs();
+      return;
+    }
+    isLive = true;
     btn.className = 'btn-live live';
     btn.innerHTML = '<span class="rec-dot"></span> 停止直播';
     badge.className = 'live-badge on';
@@ -563,16 +661,21 @@ function toggleLive() {
     liveStart = Date.now();
     timerInterval = setInterval(updateTimer, 1000);
     updatePlatStatus();
+    startFramePushToSite();
 
-    // Start recording the canvas as a demo
     try {
-      const stream = canvas.captureStream(30);
-      mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+      const cap = canvas.captureStream(30);
+      mediaRecorder = new MediaRecorder(cap, { mimeType: 'video/webm;codecs=vp9' });
       recordedChunks = [];
       mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
       mediaRecorder.start(1000);
     } catch(e) { console.log('Recording not supported:', e); }
   } else {
+    isLive = false;
+    closePublishWs();
+    try {
+      await fetch(location.origin + '/api/live/stop', { method: 'POST', credentials: 'include' });
+    } catch (e) {}
     btn.className = 'btn-live ready';
     btn.innerHTML = '<span class="rec-dot"></span> 开始直播';
     badge.className = 'live-badge off';
@@ -588,12 +691,12 @@ function toggleLive() {
       mediaRecorder.onstop = () => {
         if (recordedChunks.length > 0) {
           const blob = new Blob(recordedChunks, { type: 'video/webm' });
-          const url = URL.createObjectURL(blob);
+          const u = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          a.href = url;
+          a.href = u;
           a.download = `meiguwang-live-${new Date().toISOString().slice(0,19)}.webm`;
           a.click();
-          URL.revokeObjectURL(url);
+          URL.revokeObjectURL(u);
         }
       };
     }

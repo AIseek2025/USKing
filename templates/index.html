@@ -562,6 +562,15 @@
 {% block scripts %}
 <script>
 function _t(k){ return (typeof I18N!=='undefined'&&I18N.t)?I18N.t(k):k; }
+/** 直播列表缩略图：优先头像，否则渐变+首字母（避免无头像时整块空灰） */
+function liveStreamThumbInner(u){
+  u=u||{};
+  const init=(u.display_name||u.username||'?')[0].toUpperCase();
+  if(u.avatar_url){
+    return `<img src="${u.avatar_url}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">`;
+  }
+  return `<div aria-hidden="true" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#1a2332 0%,#0f172a 48%,#292524 100%);font-size:clamp(32px,11vw,52px);font-weight:800;color:rgba(245,158,11,.42)">${init}</div>`;
+}
 function _tf(k,v){ return (typeof I18N!=='undefined'&&I18N.fmt)?I18N.fmt(k,v):k; }
 /** 与 DOM 中实际激活的 panel 同步（避免 currentPanel 与界面不一致导致切换语言后不刷新） */
 function _spaActivePanel(){
@@ -688,7 +697,7 @@ async function loadLivePanel(){
     grid.innerHTML=streams.map(s=>{
       const u=s.user||{};const init=(u.display_name||u.username||'?')[0].toUpperCase();
       return `<a href="/live/${u.username}" class="stream-card" style="color:inherit;text-decoration:none">
-        <div class="stream-thumb"><div class="live-dot">LIVE</div><div class="viewer-count">${s.viewer_count||0}</div></div>
+        <div class="stream-thumb">${liveStreamThumbInner(u)}<div class="live-dot">LIVE</div><div class="viewer-count">${s.viewer_count||0}</div></div>
         <div class="stream-info"><div class="si-title">${s.title||_t('spa.streaming')}</div><div class="si-user"><div class="si-avatar">${init}</div>${u.display_name||u.username}</div></div></a>`;
     }).join('');
   }catch{}
@@ -778,6 +787,7 @@ async function initDashboard(){
         <div style="padding:12px 14px;margin-top:auto">
           <div style="font-size:11px;color:var(--text3);margin-bottom:6px" data-i18n="dash.stream_url_label">直播链接</div>
           <div style="display:flex;gap:6px"><input class="form-input" readonly id="shareLink" value="${location.origin}/live/${APP.user.username}" style="font-size:11px;height:30px"><button type="button" class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('shareLink').value);alert(typeof _t==='function'?_t('common.copied'):'OK')" style="height:30px;font-size:10px;flex-shrink:0" data-i18n="dash.copy_btn">复制</button></div>
+          <p style="font-size:10px;color:var(--text3);line-height:1.5;margin-top:8px;margin-bottom:0" data-i18n="dash.viewer_video_note">站内观看页暂不播放实时画面；采集预览仅本机可见。已开外站推流时请让观众去对应平台。</p>
         </div>
       </div>
     </div>`;
@@ -2168,7 +2178,7 @@ function srRenderResults(){
       html+=`<div class="stream-grid">${srData.streams.map(s=>{
         const u=s.user||{};
         return `<div class="stream-card" style="cursor:pointer" onclick="switchPanel('live',document.querySelector('[data-panel=live]'))">
-          <div class="stream-thumb"><div class="live-dot">LIVE</div><div class="viewer-count">${s.viewer_count||0}</div></div>
+          <div class="stream-thumb">${liveStreamThumbInner(u)}<div class="live-dot">LIVE</div><div class="viewer-count">${s.viewer_count||0}</div></div>
           <div class="stream-info"><div class="si-title">${s.title||_t('spa.streaming')}</div><div class="si-user">${u.display_name||u.username||''}</div></div>
         </div>`;
       }).join('')}</div>`;

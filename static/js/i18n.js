@@ -121,6 +121,10 @@ const I18N = {
     'dash.framerate': { zh: '帧率', en: 'Frame rate' },
     'dash.bitrate': { zh: '码率', en: 'Bitrate' },
     'dash.stream_url_label': { zh: '直播链接', en: 'Stream URL' },
+    'dash.viewer_video_note': {
+      zh: '说明：站内观众在 /live 链接观看的是「直播采集」页推送的画面（JPEG 约 10fps）。请保持采集页打开；若仅在后台点了开始直播而未开采集页，观众会看到等待画面。大并发或高清建议后续改用 HLS/CDN。',
+      en: 'In-site viewers see frames from the capture tab (~10 fps JPEG). Keep that tab open. For scale/HD, plan HLS or a CDN later.',
+    },
     'dash.copy_btn': { zh: '复制', en: 'Copy' },
     'dash.layout_auto': { zh: '自动', en: 'Auto' },
     'dash.layout_side': { zh: '左右', en: 'Side by side' },
@@ -130,8 +134,17 @@ const I18N = {
     'dash.fps_label': { zh: ' fps', en: ' fps' },
 
     // === Watch ===
-    'watch.loading': { zh: '直播画面加载中...', en: 'Loading stream...' },
-    'watch.webrtc_hint': { zh: '（WebRTC 接入后将显示实时画面）', en: '(Real-time video after WebRTC integration)' },
+    'watch.loading': { zh: '暂无实时播放画面', en: 'No live video feed yet' },
+    'watch.webrtc_hint': {
+      zh: '观看页尚未连接主播音视频流（未实现 WebRTC / HLS 等播放链路）。主播请在「直播采集」页点击「添加窗口」授权屏幕后，仅能在本机预览；观众端要看到画面需后续接入流媒体服务。',
+      en: 'This page is not wired to a video pipeline yet (no WebRTC/HLS). The capture page can preview locally after you pick a window; viewers need a future streaming backend.',
+    },
+    'watch.connecting': { zh: '正在连接直播画面…', en: 'Connecting to live feed…' },
+    'watch.wait_capture': {
+      zh: '若长时间无画面：请主播打开「直播采集」页，添加窗口后点击「开始直播」，并保持该页不要关闭。',
+      en: 'If this stays blank: the streamer must open the capture page, add a window, click Start live, and keep that tab open.',
+    },
+    'watch.stream_ended': { zh: '直播已结束或未推流', en: 'Stream ended or not publishing' },
     'watch.chat_title': { zh: '聊天（即将上线）', en: 'Chat (Coming Soon)' },
     'watch.chat_dev': { zh: '直播聊天功能开发中', en: 'Live chat feature in development' },
     'watch.offline': { zh: '当前没有在直播', en: 'Currently not streaming' },

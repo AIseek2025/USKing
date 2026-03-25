@@ -51,6 +51,22 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 - 转发 `Host`、`X-Forwarded-For`、`X-Forwarded-Proto`，以便生成正确链接与日志。
 - Uvicorn 已使用 `--proxy-headers`；请将受信任代理 IP 收窄到内网（当前示例为 `*` 便于先跑通，**生产建议改为具体 CIDR**）。
+- **站内直播（WebSocket）**：Nginx 对 `/api/ws/` 需升级协议，否则观看页无法收画面。示例：
+
+```nginx
+location /api/ws/ {
+    proxy_pass http://127.0.0.1:8002;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 86400s;
+}
+```
+
+- 直播状态仅在 **单进程** 内存中广播；`uvicorn --workers` 大于 1 时各 worker 互不共享，观众可能连错进程。**站内 JPEG 推流建议 `--workers 1`**，或后续改为 Redis 等跨进程方案。
 
 ## 6. 可选能力
 
