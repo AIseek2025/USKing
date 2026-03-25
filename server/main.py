@@ -17,7 +17,7 @@ import os
 from .config import DEV_MODE, assert_production_config, UPLOAD_DIR
 
 from .database import engine, Base
-from .models import User, Album, AlbumVideo, SiteSetting, Bookmark, MediaItem, Like, Follow, Comment, Conversation, DirectMessage
+from .models import User, Album, AlbumVideo, SiteSetting, Bookmark, MediaItem, Like, Follow, Comment, Conversation, DirectMessage, LiveChatMessage
 from .auth import get_current_user, hash_password
 from .database import SessionLocal
 from .api import router as api_router

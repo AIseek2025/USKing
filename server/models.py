@@ -90,6 +90,16 @@ class LiveStream(Base):
     user = relationship("User", back_populates="streams")
 
 
+class LiveChatMessage(Base):
+    """直播间公屏留言（仅关联当前 live_streams 行，下播后历史仍可按 stream_id 查询）。"""
+    __tablename__ = "live_chat_messages"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stream_id = Column(Integer, ForeignKey("live_streams.id"), nullable=False, index=True)
+    user_id = Column(String(16), ForeignKey("users.id"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+
 class Banner(Base):
     __tablename__ = "banners"
     id = Column(Integer, primary_key=True, autoincrement=True)

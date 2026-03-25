@@ -7,7 +7,26 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from sqlalchemy import or_, and_, func, cast, String
 from .database import get_db, engine
-from .models import User, EmailCode, Post, LiveStream, Payment, Banner, Album, AlbumVideo, SiteSetting, Bookmark, MediaItem, Like, Follow, Comment, Conversation, DirectMessage, utcnow
+from .models import (
+    User,
+    EmailCode,
+    Post,
+    LiveStream,
+    LiveChatMessage,
+    Payment,
+    Banner,
+    Album,
+    AlbumVideo,
+    SiteSetting,
+    Bookmark,
+    MediaItem,
+    Like,
+    Follow,
+    Comment,
+    Conversation,
+    DirectMessage,
+    utcnow,
+)
 from .auth import (
     hash_password, verify_password, create_access_token,
     get_current_user, require_user, require_admin,
@@ -135,6 +154,10 @@ class PostMediaUrlBody(BaseModel):
 
 class StreamUpdate(BaseModel):
     title: Optional[str] = None
+
+
+class LiveChatBody(BaseModel):
+    content: str = Field(..., max_length=500)
     is_live: Optional[bool] = None
 
 class AdminUserUpdate(BaseModel):
@@ -804,6 +827,85 @@ def leave_stream(username: str, db: Session = Depends(get_db)):
         stream.viewer_count -= 1
         db.commit()
     return {"ok": True}
+
+
+@router.get("/live/chat/{username}")
+def live_chat_list(
+    username: str,
+    since_id: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    host = db.query(User).filter(User.username == username).first()
+    if not host:
+        raise HTTPException(404)
+    stream = db.query(LiveStream).filter(LiveStream.user_id == host.id, LiveStream.is_live == True).first()
+    if not stream:
+        return {"messages": [], "stream_live": False}
+    rows = (
+        db.query(LiveChatMessage)
+        .filter(LiveChatMessage.stream_id == stream.id, LiveChatMessage.id > since_id)
+        .order_by(LiveChatMessage.id.asc())
+        .limit(limit)
+        .all()
+    )
+    user_ids = list({m.user_id for m in rows})
+    users_map = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    messages = []
+    for m in rows:
+        u = users_map.get(m.user_id)
+        messages.append(
+            {
+                "id": m.id,
+                "content": m.content,
+                "created_at": _dt_iso(m.created_at),
+                "author": {
+                    "username": u.username,
+                    "display_name": u.display_name or u.username,
+                    "avatar_url": u.avatar_url or "",
+                }
+                if u
+                else None,
+            }
+        )
+    return {"messages": messages, "stream_live": True}
+
+
+@router.post("/live/chat/{username}")
+def live_chat_send(
+    username: str,
+    body: LiveChatBody,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(400, "内容不能为空")
+    if len(content) > 500:
+        raise HTTPException(400, "单条不超过500字")
+    host = db.query(User).filter(User.username == username).first()
+    if not host:
+        raise HTTPException(404)
+    stream = db.query(LiveStream).filter(LiveStream.user_id == host.id, LiveStream.is_live == True).first()
+    if not stream:
+        raise HTTPException(409, "当前未在直播")
+    msg = LiveChatMessage(stream_id=stream.id, user_id=user.id, content=content)
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    return {
+        "message": {
+            "id": msg.id,
+            "content": msg.content,
+            "created_at": _dt_iso(msg.created_at),
+            "author": {
+                "username": user.username,
+                "display_name": user.display_name or user.username,
+                "avatar_url": user.avatar_url or "",
+            },
+        }
+    }
+
 
 # --------------- Payment / Membership ---------------
 

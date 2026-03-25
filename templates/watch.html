@@ -11,6 +11,8 @@ const streamer={{ streamer_json|safe }};
 
 let _livePollTimer = null;
 let _liveBlobUrl = null;
+let _chatPollTimer = null;
+let _chatSinceId = 0;
 
 function _escapeHtml(s) {
   return String(s == null ? '' : s)
@@ -29,6 +31,14 @@ function _stopLivePoll() {
     try { URL.revokeObjectURL(_liveBlobUrl); } catch (e) {}
     _liveBlobUrl = null;
   }
+}
+
+function _stopWatchChat() {
+  if (_chatPollTimer) {
+    clearInterval(_chatPollTimer);
+    _chatPollTimer = null;
+  }
+  _chatSinceId = 0;
 }
 
 function _startLivePoll() {
@@ -64,7 +74,150 @@ function _startLivePoll() {
   _livePollTimer = setInterval(tick, 130);
 }
 
+function _watchFitStorageKey() {
+  return 'uskingWatchFit_' + streamer;
+}
+
+function _initWatchFit() {
+  const box = document.querySelector('.watch-video-box');
+  const bContain = document.getElementById('watchFitContain');
+  const bCover = document.getElementById('watchFitCover');
+  if (!box || !bContain || !bCover) return;
+  let mode = localStorage.getItem(_watchFitStorageKey()) || 'contain';
+  function apply() {
+    box.classList.toggle('is-cover', mode === 'cover');
+    bContain.classList.toggle('active', mode === 'contain');
+    bCover.classList.toggle('active', mode === 'cover');
+    try {
+      localStorage.setItem(_watchFitStorageKey(), mode);
+    } catch (e) {}
+  }
+  bContain.addEventListener('click', () => {
+    mode = 'contain';
+    apply();
+  });
+  bCover.addEventListener('click', () => {
+    mode = 'cover';
+    apply();
+  });
+  apply();
+}
+
+function _clearWatchChatEmpty() {
+  const e = document.getElementById('watchChatEmpty');
+  if (e) e.remove();
+}
+
+function _renderChatMessage(m) {
+  const a = m.author || {};
+  const name = _escapeHtml(a.display_name || a.username || '?');
+  const body = _escapeHtml(m.content || '');
+  let t = '';
+  try {
+    const loc = typeof I18N !== 'undefined' && I18N.lang === 'en' ? 'en-US' : 'zh-CN';
+    t = new Date(m.created_at).toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {}
+  return (
+    '<div class="watch-chat-msg" data-id="' +
+    Number(m.id) +
+    '"><div class="wc-user">' +
+    name +
+    '</div><div class="wc-body">' +
+    body +
+    '</div><div class="wc-time">' +
+    _escapeHtml(t) +
+    '</div></div>'
+  );
+}
+
+async function _pollWatchChat() {
+  const list = document.getElementById('watchChatList');
+  if (!list) return;
+  try {
+    const r = await fetch(
+      location.origin +
+        '/api/live/chat/' +
+        encodeURIComponent(streamer) +
+        '?since_id=' +
+        _chatSinceId,
+      { credentials: 'omit', cache: 'no-store' }
+    );
+    const j = await r.json();
+    if (!j.stream_live) return;
+    const msgs = j.messages || [];
+    for (const m of msgs) {
+      if (m.id > _chatSinceId) _chatSinceId = m.id;
+      if (!list.querySelector('.watch-chat-msg[data-id="' + Number(m.id) + '"]')) {
+        _clearWatchChatEmpty();
+        list.insertAdjacentHTML('beforeend', _renderChatMessage(m));
+      }
+    }
+    list.scrollTop = list.scrollHeight;
+  } catch (e) {}
+}
+
+function _startWatchChat() {
+  _stopWatchChat();
+  _chatSinceId = 0;
+  const list = document.getElementById('watchChatList');
+  if (list) {
+    list.innerHTML =
+      '<p id="watchChatEmpty" class="watch-chat-empty">' +
+      I18N.t('watch.chat_empty') +
+      '</p>';
+  }
+  _pollWatchChat();
+  _chatPollTimer = setInterval(_pollWatchChat, 2000);
+}
+
+function _initWatchChatUI() {
+  const row = document.getElementById('watchChatInputRow');
+  const hint = document.getElementById('watchChatLoginHint');
+  const send = document.getElementById('watchChatSend');
+  const inp = document.getElementById('watchChatInput');
+  const logged = typeof APP !== 'undefined' && APP.user && APP.token;
+  if (row) row.style.display = logged ? '' : 'none';
+  if (hint) hint.style.display = logged ? 'none' : '';
+  if (send) {
+    send.onclick = () => _sendWatchChat();
+    send.textContent = I18N.t('watch.chat_send');
+  }
+  if (inp) {
+    inp.placeholder = I18N.t('watch.chat_ph');
+    inp.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        _sendWatchChat();
+      }
+    };
+  }
+}
+
+async function _sendWatchChat() {
+  const inp = document.getElementById('watchChatInput');
+  if (!inp || typeof APP === 'undefined' || !APP.token) return;
+  const v = (inp.value || '').trim();
+  if (!v) return;
+  inp.value = '';
+  try {
+    const data = await APP.api('POST', '/api/live/chat/' + encodeURIComponent(streamer), {
+      content: v,
+    });
+    const m = data.message;
+    if (m && m.id > _chatSinceId) _chatSinceId = m.id;
+    const list = document.getElementById('watchChatList');
+    if (list && m && !list.querySelector('.watch-chat-msg[data-id="' + Number(m.id) + '"]')) {
+      _clearWatchChatEmpty();
+      list.insertAdjacentHTML('beforeend', _renderChatMessage(m));
+      list.scrollTop = list.scrollHeight;
+    }
+  } catch (e) {
+    alert(e.message || '发送失败');
+  }
+}
+
 async function loadWatch() {
+  await APP.init();
   const r = await APP.api('GET', `/api/live/user/${encodeURIComponent(streamer)}`);
   const u = r.user;
   const s = r.stream;
@@ -81,6 +234,7 @@ async function loadWatch() {
     window.addEventListener('beforeunload', () => {
       navigator.sendBeacon(`/api/live/leave/${encodeURIComponent(streamer)}`);
       _stopLivePoll();
+      _stopWatchChat();
     });
     el.innerHTML = `
       <div class="watch-layout">
@@ -89,6 +243,12 @@ async function loadWatch() {
             <div class="watch-badges">
               <span class="badge badge-red watch-badge-live">LIVE</span>
               <span class="badge badge-gray watch-badge-vc">👁 ${s.viewer_count || 0}${I18N.t('watch.viewers')}</span>
+            </div>
+            <div class="watch-video-tools">
+              <div class="watch-fit-toggle" role="group" aria-label="video fit">
+                <button type="button" id="watchFitContain" title="${_escapeHtml(I18N.t('watch.fit_contain_title'))}">${I18N.t('watch.fit_contain_label')}</button>
+                <button type="button" id="watchFitCover" title="${_escapeHtml(I18N.t('watch.fit_full_title'))}">${I18N.t('watch.fit_full')}</button>
+              </div>
             </div>
             <img id="livePollImg" class="watch-video-img" alt="" />
             <div id="liveWsWait" class="watch-wait-overlay">
@@ -108,12 +268,23 @@ async function loadWatch() {
         </div>
         <div class="card watch-chat-card">
           <h3 class="watch-chat-h">${I18N.t('watch.chat_title')}</h3>
-          <div class="watch-chat-placeholder">${I18N.t('watch.chat_dev')}</div>
+          <div class="watch-chat-body">
+            <div id="watchChatList" class="watch-chat-list"></div>
+            <div id="watchChatInputRow" class="watch-chat-input-row" style="display:none">
+              <input type="text" id="watchChatInput" maxlength="500" autocomplete="off" />
+              <button type="button" id="watchChatSend">${I18N.t('watch.chat_send')}</button>
+            </div>
+            <p id="watchChatLoginHint" class="watch-chat-hint" style="display:none"><a href="/login">${I18N.t('watch.chat_login')}</a></p>
+          </div>
         </div>
       </div>`;
+    _initWatchFit();
+    _initWatchChatUI();
+    _startWatchChat();
     _startLivePoll();
   } else {
     _stopLivePoll();
+    _stopWatchChat();
     el.innerHTML = `<div class="card watch-offline-card">
       <div style="display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:20px">
         <div class="profile-avatar" style="width:60px;height:60px;font-size:24px">${av}</div>
