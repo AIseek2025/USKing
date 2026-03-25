@@ -51,7 +51,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 - 转发 `Host`、`X-Forwarded-For`、`X-Forwarded-Proto`，以便生成正确链接与日志。
 - Uvicorn 已使用 `--proxy-headers`；请将受信任代理 IP 收窄到内网（当前示例为 `*` 便于先跑通，**生产建议改为具体 CIDR**）。
-- **站内直播（默认 HTTP，推荐）**：观众拉 **`GET /api/live/mjpeg/{username}`**（长连接 multipart），主播推 **`POST /api/live/push-frame`**。与普通 API 一样反代即可，**不要求** WebSocket。为避免 Nginx 把画面缓冲成「一直黑屏」，建议对 API 或至少对长连接路径关闭缓冲、拉长读超时：
+- **站内直播（默认 HTTP，推荐）**：观众轮询 **`GET /api/live/last-frame/{username}`**（单张 JPEG，最耐代理缓冲）；主播推 **`POST /api/live/push-frame`**。与普通 API 一样反代即可，**不要求** WebSocket。若仍使用 MJPEG 长连接 **`GET /api/live/mjpeg/{username}`**，须关闭缓冲并拉长读超时，否则可能一直卡在「连接中」：
 
 ```nginx
 location /api/ {

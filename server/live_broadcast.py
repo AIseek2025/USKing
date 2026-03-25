@@ -2,7 +2,8 @@
 站内直播：主播推送 JPEG，观众拉流。
 
 - WebSocket（需 Nginx Upgrade）：/api/ws/live/publish、/api/ws/live/watch/{username}
-- HTTP 回退（普通反代即可）：POST /api/live/push-frame（Cookie）、GET /api/live/mjpeg/{username}（multipart MJPEG）
+- HTTP：POST /api/live/push-frame（Cookie）；观众推荐轮询 GET /api/live/last-frame/{username}（单帧 JPEG，最耐缓冲）
+- 可选：GET /api/live/mjpeg/{username}（multipart 长连接，部分 Nginx 会缓冲导致首帧迟迟不出）
 
 约束：状态仅存进程内存；生产请 uvicorn --workers 1。
 """
@@ -15,7 +16,7 @@ from collections import defaultdict
 from typing import DefaultDict, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from .auth import decode_token, require_user
@@ -114,6 +115,25 @@ async def live_push_frame(request: Request, user: User = Depends(require_user)):
     un = user.username
     await _broadcast_jpeg(un, body)
     return {"ok": True}
+
+
+@router.get("/live/last-frame/{username}")
+async def live_last_frame(username: str):
+    """返回内存中最新一帧 JPEG（短请求，适合 Nginx 默认缓冲；观看页轮询）。"""
+    un = username.strip()
+    if not un:
+        raise HTTPException(status_code=400, detail="无效用户名")
+    data = _last_jpeg.get(un)
+    if not data:
+        raise HTTPException(status_code=404, detail="暂无画面")
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @router.get("/live/mjpeg/{username}")

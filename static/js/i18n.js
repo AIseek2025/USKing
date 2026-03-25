@@ -122,8 +122,8 @@ const I18N = {
     'dash.bitrate': { zh: '码率', en: 'Bitrate' },
     'dash.stream_url_label': { zh: '直播链接', en: 'Stream URL' },
     'dash.viewer_video_note': {
-      zh: '说明：观众端通过 HTTP 拉 MJPEG，主播端用 HTTP 上传 JPEG（一般无需配置 Nginx WebSocket）。请保持「直播采集」页打开并点击「开始直播」。大并发建议后续 HLS/CDN。',
-      en: 'Viewers pull MJPEG over HTTP; the capture page uploads JPEG via HTTP (usually no WebSocket in Nginx). Keep the capture tab open. For scale, use HLS/CDN later.',
+      zh: '说明：观众端轮询 /api/live/last-frame/ 拉最新画面，主播端 POST push-frame；一般无需 WebSocket。请保持采集页打开并「开始直播」。大并发建议后续 HLS/CDN。',
+      en: 'Viewers poll /api/live/last-frame/; host POSTs push-frame; usually no WebSocket. Keep capture tab on air. For scale, use HLS/CDN.',
     },
     'dash.copy_btn': { zh: '复制', en: 'Copy' },
     'dash.layout_auto': { zh: '自动', en: 'Auto' },
@@ -141,8 +141,8 @@ const I18N = {
     },
     'watch.connecting': { zh: '正在连接直播画面…', en: 'Connecting to live feed…' },
     'watch.wait_capture': {
-      zh: '画面走普通 HTTP（无需 WebSocket）。若仍无画面：请主播在采集页点击「开始直播」并保持该页打开；或稍后刷新本页。',
-      en: 'Video uses HTTP MJPEG (no WebSocket). If blank: the host must Start live on the capture page and keep it open, or refresh.',
+      zh: '本页约每秒多次拉取最新画面（短 HTTP），不依赖 WebSocket、也不易被 Nginx 缓冲卡死。若仍无画面：请主播在采集页添加窗口并点「开始直播」，并保持该页打开。',
+      en: 'This page polls JPEG over short HTTP requests (no WebSocket, proxy-friendly). If blank: the host must add a window, Start live, and keep the capture tab open.',
     },
     'watch.stream_ended': { zh: '直播已结束或未推流', en: 'Stream ended or not publishing' },
     'watch.ws_failed': {
