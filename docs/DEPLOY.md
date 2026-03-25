@@ -51,7 +51,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 - 转发 `Host`、`X-Forwarded-For`、`X-Forwarded-Proto`，以便生成正确链接与日志。
 - Uvicorn 已使用 `--proxy-headers`；请将受信任代理 IP 收窄到内网（当前示例为 `*` 便于先跑通，**生产建议改为具体 CIDR**）。
-- **站内直播（WebSocket）**：Nginx 对 `/api/ws/` 需升级协议，否则观看页无法收画面。示例：
+- **站内直播（WebSocket）**：Nginx 对 `/api/ws/` 需升级协议，否则观看页会提示「无法连接直播画面」。`proxy_pass` 的地址须与反代到 Uvicorn 的端口一致（示例为 `8002`，按你机器实际修改）。
 
 ```nginx
 location /api/ws/ {
@@ -63,7 +63,19 @@ location /api/ws/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_read_timeout 86400s;
+    proxy_buffering off;
 }
+```
+
+  - 修改后执行 `sudo nginx -t && sudo systemctl reload nginx`。
+  - **勿**在通用 `location /` 里把 `Connection` 强行设为 `close`；若用了 `map $http_upgrade $connection_upgrade` 写法，请保证 WebSocket 请求走到 `Connection $connection_upgrade`。
+  - 自测（应返回 **`101 Switching Protocols`**，而不是整页 HTML）：
+
+```bash
+curl -sI -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+  -H 'Sec-WebSocket-Version: 13' \
+  -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+  'https://www.usking.vip/api/ws/live/watch/testuser'
 ```
 
 - 直播状态仅在 **单进程** 内存中广播；`uvicorn --workers` 大于 1 时各 worker 互不共享，观众可能连错进程。**站内 JPEG 推流建议 `--workers 1`**，或后续改为 Redis 等跨进程方案。
