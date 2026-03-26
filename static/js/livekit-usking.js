@@ -72,7 +72,15 @@
         }
         if (track.kind === 'audio') {
           var a = track.attach();
-          a.style.display = 'none';
+          a.style.position = 'absolute';
+          a.style.width = '1px';
+          a.style.height = '1px';
+          a.style.opacity = '0';
+          a.style.pointerEvents = 'none';
+          a.autoplay = true;
+          a.playsInline = true;
+          a.setAttribute('playsinline', 'true');
+          a.muted = true;
           a.dataset.lkTrackKind = 'audio';
           a.dataset.lkTrackName =
             (publication && (publication.trackName || publication.name)) || '';

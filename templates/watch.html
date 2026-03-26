@@ -18,6 +18,7 @@ let _watchLiveKitRoom = null;
 let _watchMedia = {};
 let _watchLiveKitAudioUnlocked = false;
 let _watchLiveKitAudioState = { page: 0, mic: 0, other: 0 };
+let _watchUnlockCleanup = null;
 
 function _storageKeyWatchAudioPage() {
   return 'uskingWatchAudioPage_' + streamer;
@@ -39,12 +40,20 @@ function _stopWatchLiveKit() {
   if (box) {
     box.querySelectorAll('audio[data-lk-track-kind="audio"]').forEach((el) => el.remove());
   }
+  if (_watchUnlockCleanup) {
+    _watchUnlockCleanup();
+    _watchUnlockCleanup = null;
+  }
 }
 
 function _stopWatchAudio() {
   if (_watchAudioViewer) {
     _watchAudioViewer.stop();
     _watchAudioViewer = null;
+  }
+  if (_watchUnlockCleanup) {
+    _watchUnlockCleanup();
+    _watchUnlockCleanup = null;
   }
 }
 
@@ -61,6 +70,31 @@ function _watchAudioPrefs() {
 function _setWatchAudioHint(text) {
   const hint = document.getElementById('watchAudioHint');
   if (hint) hint.textContent = text || '';
+}
+
+function _bindWatchUnlockGestures(unlockFn) {
+  if (_watchUnlockCleanup) _watchUnlockCleanup();
+  let done = false;
+  const handler = function () {
+    if (done) return;
+    done = true;
+    try {
+      Promise.resolve(unlockFn()).finally(cleanup);
+    } catch (e) {
+      cleanup();
+    }
+  };
+  const opts = { passive: true };
+  const cleanup = function () {
+    document.removeEventListener('pointerdown', handler, opts);
+    document.removeEventListener('touchend', handler, opts);
+    document.removeEventListener('keydown', handler, opts);
+    _watchUnlockCleanup = null;
+  };
+  document.addEventListener('pointerdown', handler, opts);
+  document.addEventListener('touchend', handler, opts);
+  document.addEventListener('keydown', handler, opts);
+  _watchUnlockCleanup = cleanup;
 }
 
 function _bindWatchAudioPrefInputs(onApply) {
@@ -157,6 +191,11 @@ function _registerWatchLiveKitAudio(track, publication, participant, audioEl) {
 function _initWatchLiveKitAudioUI() {
   _watchLiveKitAudioUnlocked = false;
   _watchLiveKitAudioState = { page: 0, mic: 0, other: 0 };
+  _bindWatchUnlockGestures(function () {
+    return _unlockWatchLiveKitAudio().catch(() => {
+      _setWatchAudioHint(I18N.t('watch.audio_hint_webrtc_blocked'));
+    });
+  });
   _bindWatchAudioPrefInputs(_applyWatchLiveKitAudioPrefs);
   const btn = document.getElementById('watchAudioUnlock');
   if (btn) {
@@ -196,6 +235,13 @@ function _startWatchAudio() {
       });
     };
   }
+  _bindWatchUnlockGestures(function () {
+    if (!_watchAudioViewer) return;
+    return _watchAudioViewer.unlock().then(function () {
+      const btn = document.getElementById('watchAudioUnlock');
+      if (btn) btn.style.display = 'none';
+    });
+  });
   _setWatchAudioHint(I18N.t('watch.audio_hint_bar'));
 }
 
