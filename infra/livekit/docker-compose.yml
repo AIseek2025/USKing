@@ -7,5 +7,7 @@ services:
     network_mode: host
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml:ro
+      # TURN/TLS 直接由 LiveKit 终止时，需要能读取宿主机证书
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     command: --config /etc/livekit.yaml
     restart: unless-stopped
