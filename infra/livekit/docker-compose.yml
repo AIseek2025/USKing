@@ -1,0 +1,11 @@
+# LiveKit SFU（与 USKing 同机部署示例）
+# 说明见同目录 README.md。不要在仓库中提交含真实 keys 的 livekit.yaml。
+
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    network_mode: host
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    command: --config /etc/livekit.yaml
+    restart: unless-stopped

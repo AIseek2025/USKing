@@ -43,6 +43,9 @@ tmp/
 deploy-*/
 test_ssh.py
 
+# LiveKit server local config (secrets)
+infra/livekit/livekit.yaml
+
 # Test / coverage
 .pytest_cache/
 .coverage

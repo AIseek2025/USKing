@@ -1,0 +1,19 @@
+# 复制到 /etc/nginx/conf.d/ 后重载 nginx；将 __LIVEKIT_HOST__ 换为 nip.io 或你自己的子域名。
+# TLS 由 certbot --nginx 签发后，可把本文件中的 443 段取消注释或合并进 certbot 生成的 server 块。
+
+server {
+    listen 80;
+    server_name __LIVEKIT_HOST__;
+
+    location / {
+        proxy_pass http://127.0.0.1:7880;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_buffering off;
+    }
+}
