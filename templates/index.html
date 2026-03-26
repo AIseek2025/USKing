@@ -427,7 +427,6 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
             <span data-i18n="spa.research_title">公司投研与资讯</span>
           </h2>
-          <p id="researchApiStatus" style="font-size:12px;color:var(--text3);margin-bottom:12px"></p>
           <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:20px">
             <input type="text" id="researchTicker" class="form-input" value="AAPL" data-i18n-ph="spa.research_ticker_ph" placeholder="股票代码，如 AAPL" style="width:140px;height:38px;text-transform:uppercase">
             <button type="button" class="btn btn-primary btn-sm" onclick="researchLoadAll()" data-i18n="spa.research_load">加载</button>
@@ -2769,16 +2768,6 @@ async function usLoadNews(){
   }catch(e){ out.innerHTML='<p class="us-err">'+usEsc(e.message||_t('spa.us_fail'))+'</p>'; }
 }
 
-function researchRefreshStatus(){
-  fetch('/api/us/research/status').then(r=>r.json()).then(m=>{
-    const el=document.getElementById('researchApiStatus');
-    if(!el||typeof I18N==='undefined') return;
-    el.textContent=I18N.fmt('spa.research_api_status',{
-      fh:m.finnhub_configured?I18N.t('spa.us_on'):I18N.t('spa.us_off'),
-      av:m.alphavantage_configured?I18N.t('spa.us_on'):I18N.t('spa.us_off'),
-    });
-  }).catch(()=>{});
-}
 const _RESEARCH_TICKERS_FALLBACK=['NVDA','MSFT','AAPL','AMZN','GOOGL','META','AVGO','TSLA','BRK.B','JPM','WMT','LLY','V','UNH','XOM','ORCL','MA','BAC','COST','ABBV','NFLX','CRM','AMD','KO','PEP','DIS','CSCO','ADBE','TMO','PM','MCD','WFC','MS','GS','RTX','HON','IBM','INTC','QCOM','TXN','AMAT','LOW','SBUX','SPGI','BLK','BKNG','CAT','DE','GE','AMGN','AXP','MDT','ISRG','GILD','SYK','TJX','ADP','C','SCHW','PLD'];
 function _researchAttrEsc(s){
   return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
@@ -2878,7 +2867,6 @@ async function initResearchRail(){
   if(window.I18N) I18N.apply();
 }
 async function initResearchPanel(){
-  researchRefreshStatus();
   await initResearchRail();
   researchLoadAll();
 }

@@ -165,6 +165,11 @@ def _user_is_cached_live(user_id: str) -> bool:
     return (time.monotonic() - ts) < _LIVE_CHECK_INTERVAL
 
 
+def live_memory_recent(user_id: str) -> bool:
+    """与开播/start、推帧、心跳共享的短期内存标记（约 30s 内有效）。"""
+    return _user_is_cached_live(user_id)
+
+
 async def _broadcast_jpeg(un: str, data: bytes) -> None:
     _last_jpeg[un] = data
     _frame_ver[un] += 1

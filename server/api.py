@@ -1,6 +1,6 @@
 import json, logging, math, random, re, string, uuid, os
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query
 from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -45,6 +45,7 @@ from .live_broadcast import (
     mark_user_live,
     clear_user_frame,
     disconnect_live_audio_room,
+    live_memory_recent,
 )
 from .live_media import (
     host_session_payload,
@@ -835,6 +836,7 @@ def live_heartbeat(user: User = Depends(require_user), db: Session = Depends(get
 
 @router.get("/live/active")
 def get_active_streams(db: Session = Depends(get_db)):
+    """仅返回「确有画面或近期仍有开播会话信号」的直播；其余 DB 中 is_live 残留行会标记下播，避免僵尸条目。"""
     streams = (
         db.query(LiveStream)
         .options(joinedload(LiveStream.user))
@@ -843,11 +845,31 @@ def get_active_streams(db: Session = Depends(get_db)):
         .limit(50)
         .all()
     )
-    result = []
+    result: List[Dict[str, Any]] = []
+    stale_ids: list[int] = []
+    stale_users: list[tuple[str, str]] = []
     for s in streams:
-        d = _stream_dict(s)
-        d["user"] = _user_dict(s.user) if s.user else None
-        result.append(d)
+        u = s.user
+        if not u:
+            stale_ids.append(s.id)
+            continue
+        un = (u.username or "").strip()
+        if username_has_frame(un) or live_memory_recent(u.id):
+            d = _stream_dict(s)
+            d["user"] = _user_dict(u)
+            result.append(d)
+        else:
+            stale_ids.append(s.id)
+            stale_users.append((un, u.id))
+    if stale_ids:
+        now = utcnow()
+        db.query(LiveStream).filter(LiveStream.id.in_(stale_ids)).update(
+            {LiveStream.is_live: False, LiveStream.ended_at: now},
+            synchronize_session=False,
+        )
+        db.commit()
+        for un, uid in stale_users:
+            clear_user_frame(un, uid)
     return {"streams": result}
 
 
