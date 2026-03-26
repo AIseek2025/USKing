@@ -588,7 +588,11 @@ function _revokeLiveThumbsIn(root){
 var _thumbBackoff={};
 function _liveThumbPollTick(){
   const imgs=document.querySelectorAll('img.live-last-frame');
-  const active=Array.from(imgs).filter((img)=>img.offsetParent!==null);
+  /** 不能用 img.offsetParent：缩略图默认 display:none，未出首帧前一直为 null，轮询会被清空导致永远拉不到 last-frame */
+  const active=Array.from(imgs).filter((img)=>{
+    const thumb=img.closest('.stream-thumb');
+    return thumb && thumb.offsetParent!==null;
+  });
   if(!active.length){
     if(_liveThumbPollTimer){clearInterval(_liveThumbPollTimer);_liveThumbPollTimer=null;}
     return;

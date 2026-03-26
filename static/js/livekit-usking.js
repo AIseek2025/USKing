@@ -154,11 +154,13 @@
         return chain
           .then(function () {
             if (opts.audioPageTrack || opts.audioMicTrack) {
-              return publishAudio(
-                opts.audioPageTrack,
-                'page',
-                Track && Track.Source ? Track.Source.ScreenShare : undefined
-              ).then(function () {
+              var pageSrc =
+                Track && Track.Source && Track.Source.ScreenShareAudio !== undefined
+                  ? Track.Source.ScreenShareAudio
+                  : Track && Track.Source
+                    ? Track.Source.ScreenShare
+                    : undefined;
+              return publishAudio(opts.audioPageTrack, 'page', pageSrc).then(function () {
                 return publishAudio(
                   opts.audioMicTrack,
                   'mic',
