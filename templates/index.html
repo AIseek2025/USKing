@@ -834,6 +834,13 @@ async function initDashboard(){
           <div id="dashPlatList" style="display:flex;flex-direction:column;gap:6px"></div>
           <button type="button" onclick="dashAddPlatform()" style="width:100%;margin-top:8px;padding:7px;border:1.5px dashed var(--bg4);border-radius:6px;background:none;color:var(--text3);font-size:11px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--bg4)';this.style.color='var(--text3)'" data-i18n="dash.add_platform">+ 添加平台</button>
         </div>
+        <!-- Live audio (in-site viewers) -->
+        <div style="padding:12px 14px;border-bottom:1px solid var(--bg3)">
+          <h3 style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px" data-i18n="dash.audio_h">站内直播声音</h3>
+          <p style="font-size:10px;color:var(--text3);line-height:1.5;margin-bottom:8px" data-i18n="dash.audio_hint_live">共享窗口时在系统对话框中开启音频；修改选项后请移除窗口并重新添加。</p>
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);cursor:pointer;margin-bottom:6px;user-select:none"><input type="checkbox" id="dashCapPageAudio" /> <span data-i18n="dash.cap_page_audio">采集画面/系统声音</span></label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);cursor:pointer;user-select:none"><input type="checkbox" id="dashCapMicAudio" checked /> <span data-i18n="dash.cap_mic_audio">采集麦克风</span></label>
+        </div>
         <!-- Settings -->
         <div style="padding:12px 14px;border-bottom:1px solid var(--bg3)">
           <h3 style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px" data-i18n="dash.encoder_h">推流设置</h3>
@@ -895,6 +902,7 @@ function dashRefreshI18n(){
 /* Capture engine (embedded) */
 let _dSources=[], _dRAF=null, _dLayout='auto', _dLive=false, _dStart=0, _dTimerInt=null;
 let _dFramePushTimer=null, _dFramePushInFlight=false, _dStreamCanvas=null, _dStreamCtx=null;
+let _dMicStream=null, _dLiveAudioPub=null;
 const _dLAYOUTS={
   single:{cells:n=>[{x:0,y:0,w:1,h:1}]},
   sideBySide:{cells:n=>[{x:0,y:0,w:.5,h:1},{x:.5,y:0,w:.5,h:1}]},
@@ -1002,7 +1010,8 @@ function dashTestPlat(i){
 
 async function dashAddSource(){
   try{
-    const stream=await navigator.mediaDevices.getDisplayMedia({video:{cursor:'always',frameRate:30},audio:false,preferCurrentTab:false});
+    const capPg=document.getElementById('dashCapPageAudio')&&document.getElementById('dashCapPageAudio').checked;
+    const stream=await navigator.mediaDevices.getDisplayMedia({video:{cursor:'always',frameRate:30},audio:!!capPg,preferCurrentTab:false});
     const track=stream.getVideoTracks()[0];
     const settings=track.getSettings();
     const label=track.label||(_t('dash.window_n')+(_dSources.length+1));
@@ -1127,11 +1136,26 @@ async function startStream(){
     document.getElementById('btnStop').style.display='';
     _dLive=true;
     dashStartFramePushToSite();
+    _dMicStream=null;
+    if(document.getElementById('dashCapMicAudio')&&document.getElementById('dashCapMicAudio').checked){
+      try{_dMicStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});}catch(e){console.warn('mic',e);}
+    }
+    var pageAud=null;
+    for(var si=0;si<_dSources.length;si++){
+      if(_dSources[si].stream.getAudioTracks&&_dSources[si].stream.getAudioTracks().length){pageAud=_dSources[si].stream;break;}
+    }
+    if(typeof USKingLiveAudio!=='undefined'){
+      if(_dLiveAudioPub){_dLiveAudioPub.stop();_dLiveAudioPub=null;}
+      _dLiveAudioPub=new USKingLiveAudio.Publisher((APP.token)||'');
+      _dLiveAudioPub.start(pageAud,_dMicStream);
+    }
   }catch(e){if(err){err.textContent=e.message;err.style.display='block'}}
 }
 async function stopStream(){
   _dLive=false;
   dashStopFramePushToSite();
+  if(_dLiveAudioPub){_dLiveAudioPub.stop();_dLiveAudioPub=null;}
+  if(_dMicStream){_dMicStream.getTracks().forEach(function(t){t.stop();});_dMicStream=null;}
   await APP.api('POST','/api/live/stop');
   document.getElementById('liveStatus').className='badge badge-gray';
   document.getElementById('liveStatus').textContent=_t('dash.status_off');

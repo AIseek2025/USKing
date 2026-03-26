@@ -13,6 +13,66 @@ let _livePollTimer = null;
 let _liveBlobUrl = null;
 let _chatPollTimer = null;
 let _chatSinceId = 0;
+let _watchAudioViewer = null;
+
+function _storageKeyWatchAudioPage() {
+  return 'uskingWatchAudioPage_' + streamer;
+}
+function _storageKeyWatchAudioMic() {
+  return 'uskingWatchAudioMic_' + streamer;
+}
+
+function _stopWatchAudio() {
+  if (_watchAudioViewer) {
+    _watchAudioViewer.stop();
+    _watchAudioViewer = null;
+  }
+}
+
+function _startWatchAudio() {
+  _stopWatchAudio();
+  if (typeof USKingLiveAudio === 'undefined') return;
+  _watchAudioViewer = new USKingLiveAudio.Viewer(streamer);
+  let p = true;
+  let m = true;
+  try {
+    p = localStorage.getItem(_storageKeyWatchAudioPage()) !== '0';
+    m = localStorage.getItem(_storageKeyWatchAudioMic()) !== '0';
+  } catch (e) {}
+  _watchAudioViewer.setGains(p, m);
+  _watchAudioViewer.start();
+  const cbP = document.getElementById('watchAudioPage');
+  const cbM = document.getElementById('watchAudioMic');
+  if (cbP) {
+    cbP.checked = p;
+    cbP.onchange = function () {
+      if (!_watchAudioViewer) return;
+      _watchAudioViewer.setGains(cbP.checked, cbM ? cbM.checked : false);
+      try {
+        localStorage.setItem(_storageKeyWatchAudioPage(), cbP.checked ? '1' : '0');
+      } catch (e) {}
+    };
+  }
+  if (cbM) {
+    cbM.checked = m;
+    cbM.onchange = function () {
+      if (!_watchAudioViewer) return;
+      _watchAudioViewer.setGains(cbP ? cbP.checked : false, cbM.checked);
+      try {
+        localStorage.setItem(_storageKeyWatchAudioMic(), cbM.checked ? '1' : '0');
+      } catch (e) {}
+    };
+  }
+  const btn = document.getElementById('watchAudioUnlock');
+  if (btn) {
+    btn.onclick = function () {
+      if (!_watchAudioViewer) return;
+      _watchAudioViewer.unlock().then(function () {
+        btn.style.display = 'none';
+      });
+    };
+  }
+}
 
 function _escapeHtml(s) {
   return String(s == null ? '' : s)
@@ -237,6 +297,7 @@ async function loadWatch() {
       navigator.sendBeacon(`/api/live/leave/${encodeURIComponent(streamer)}`);
       _stopLivePoll();
       _stopWatchChat();
+      _stopWatchAudio();
     });
     el.innerHTML = `
       <div class="watch-layout">
@@ -251,6 +312,12 @@ async function loadWatch() {
                 <button type="button" id="watchFitContain" title="${_escapeHtml(I18N.t('watch.fit_contain_title'))}">${I18N.t('watch.fit_contain_label')}</button>
                 <button type="button" id="watchFitCover" title="${_escapeHtml(I18N.t('watch.fit_full_title'))}">${I18N.t('watch.fit_full')}</button>
               </div>
+            </div>
+            <div class="watch-audio-bar" id="watchAudioBar">
+              <button type="button" id="watchAudioUnlock" class="watch-audio-unlock-btn">${I18N.t('watch.audio_unlock')}</button>
+              <span class="watch-audio-hint">${I18N.t('watch.audio_hint_bar')}</span>
+              <label class="watch-audio-lab"><input type="checkbox" id="watchAudioPage" checked /> ${I18N.t('watch.audio_page')}</label>
+              <label class="watch-audio-lab"><input type="checkbox" id="watchAudioMic" checked /> ${I18N.t('watch.audio_mic')}</label>
             </div>
             <img id="livePollImg" class="watch-video-img" alt="" />
             <div id="liveWsWait" class="watch-wait-overlay">
@@ -284,9 +351,11 @@ async function loadWatch() {
     _initWatchChatUI();
     _startWatchChat();
     _startLivePoll();
+    _startWatchAudio();
   } else {
     _stopLivePoll();
     _stopWatchChat();
+    _stopWatchAudio();
     el.innerHTML = `<div class="card watch-offline-card">
       <div style="display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:20px">
         <div class="profile-avatar" style="width:60px;height:60px;font-size:24px">${av}</div>

@@ -197,6 +197,46 @@ html[lang="en"] .i18n-only-en{display:block!important}
   background:rgba(255,215,0,.2);
   color:var(--accent);
 }
+.watch-audio-bar{
+  position:absolute;
+  left:10px;
+  right:10px;
+  bottom:10px;
+  z-index:6;
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px 12px;
+  padding:8px 10px;
+  border-radius:8px;
+  background:rgba(0,0,0,.55);
+  border:1px solid rgba(255,255,255,.1);
+  backdrop-filter:blur(6px);
+  pointer-events:auto;
+  max-width:calc(100% - 20px);
+}
+.watch-audio-unlock-btn{
+  padding:6px 12px;
+  border-radius:6px;
+  border:none;
+  background:var(--accent);
+  color:#000;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+}
+.watch-audio-unlock-btn:hover{opacity:.92}
+.watch-audio-hint{font-size:10px;color:var(--text3);flex:1;min-width:140px;line-height:1.4}
+.watch-audio-lab{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  color:var(--text2);
+  cursor:pointer;
+  user-select:none;
+}
+.watch-audio-lab input{accent-color:var(--accent)}
 .watch-badges{
   position:absolute;
   top:10px;

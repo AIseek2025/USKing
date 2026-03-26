@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from collections import defaultdict
@@ -40,6 +41,74 @@ MJPEG_BOUNDARY = b"frame"
 MJPEG_SEP = b"--frame\r\n"
 
 _WS_SEND_TIMEOUT = 3.0
+
+_audio_viewers: DefaultDict[str, List[WebSocket]] = defaultdict(list)
+_audio_publishers: Dict[str, WebSocket] = {}
+_audio_sr: Dict[str, int] = {}
+_AUDIO_CH_PAGE = 0
+_AUDIO_CH_MIC = 1
+_MAX_AUDIO_PACKET = 256 * 1024
+
+
+async def disconnect_live_audio_room(username: str) -> None:
+    """停播时关闭该房间全部音频 WS（观众与主播推音频）。"""
+    un = (username or "").strip()
+    if not un:
+        return
+    async with _state_lock:
+        viewers = list(_audio_viewers.pop(un, []))
+        pub = _audio_publishers.pop(un, None)
+    _audio_sr.pop(un, None)
+    for vw in viewers:
+        try:
+            await vw.close(code=1000)
+        except Exception:
+            pass
+    if pub:
+        try:
+            await pub.close(code=1000)
+        except Exception:
+            pass
+
+
+async def _fanout_audio_bytes(un: str, data: bytes) -> None:
+    viewers = list(_audio_viewers.get(un, []))
+    if not viewers:
+        return
+    dead: Set[WebSocket] = set()
+
+    async def _send(vw: WebSocket) -> None:
+        try:
+            await asyncio.wait_for(vw.send_bytes(data), timeout=_WS_SEND_TIMEOUT)
+        except Exception:
+            dead.add(vw)
+
+    await asyncio.gather(*(_send(vw) for vw in viewers))
+    if dead:
+        async with _state_lock:
+            lst = _audio_viewers.get(un)
+            if lst:
+                _audio_viewers[un] = [w for w in lst if w not in dead]
+
+
+async def _fanout_audio_text(un: str, text: str) -> None:
+    viewers = list(_audio_viewers.get(un, []))
+    if not viewers:
+        return
+    dead: Set[WebSocket] = set()
+
+    async def _send(vw: WebSocket) -> None:
+        try:
+            await asyncio.wait_for(vw.send_text(text), timeout=_WS_SEND_TIMEOUT)
+        except Exception:
+            dead.add(vw)
+
+    await asyncio.gather(*(_send(vw) for vw in viewers))
+    if dead:
+        async with _state_lock:
+            lst = _audio_viewers.get(un)
+            if lst:
+                _audio_viewers[un] = [w for w in lst if w not in dead]
 
 
 def _jpeg_ok(data: bytes) -> bool:
@@ -297,5 +366,112 @@ async def ws_live_watch(websocket: WebSocket, username: str):
     finally:
         async with _state_lock:
             lst = _viewers.get(un)
+            if lst and websocket in lst:
+                lst.remove(websocket)
+
+
+@router.websocket("/ws/live/audio/publish")
+async def ws_audio_publish(websocket: WebSocket):
+    """主播推送 PCM：每帧 [uint8 声道 0=画面系统音 1=麦克风][int16le mono ...]；首包可发 JSON 文本 sample_rate。"""
+    await websocket.accept()
+    token = (websocket.query_params.get("token") or "").strip()
+    if not token:
+        token = (websocket.cookies.get("token") or "").strip()
+    uid = decode_token(token) if token else None
+    if not uid:
+        await websocket.close(code=4401)
+        return
+    db: Session = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == uid, User.is_active == True).first()
+    finally:
+        db.close()
+    if not user or not user.live_enabled:
+        await websocket.close(code=4403)
+        return
+    db2: Session = SessionLocal()
+    try:
+        stream = (
+            db2.query(LiveStream)
+            .filter(LiveStream.user_id == user.id, LiveStream.is_live == True)
+            .first()
+        )
+    finally:
+        db2.close()
+    if not stream:
+        await websocket.close(code=4409)
+        return
+    un = user.username
+    async with _state_lock:
+        old_pub = _audio_publishers.get(un)
+        if old_pub is not None and old_pub is not websocket:
+            try:
+                await old_pub.close(code=4000)
+            except Exception:
+                pass
+        _audio_publishers[un] = websocket
+    try:
+        while True:
+            msg = await websocket.receive()
+            if msg.get("type") == "websocket.disconnect":
+                break
+            if msg.get("type") != "websocket.receive":
+                continue
+            data_b = msg.get("bytes")
+            if data_b is not None:
+                if len(data_b) < 3 or len(data_b) > _MAX_AUDIO_PACKET:
+                    continue
+                ch = data_b[0]
+                if ch not in (_AUDIO_CH_PAGE, _AUDIO_CH_MIC):
+                    continue
+                await _fanout_audio_bytes(un, data_b)
+                continue
+            data_t = msg.get("text")
+            if data_t is not None:
+                try:
+                    o = json.loads(data_t)
+                    if o.get("type") == "audio_cfg":
+                        sr = int(o.get("sample_rate", 0))
+                        if 8000 <= sr <= 96000:
+                            _audio_sr[un] = sr
+                            await _fanout_audio_text(
+                                un,
+                                json.dumps({"type": "audio_cfg", "sample_rate": sr}),
+                            )
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    pass
+    except WebSocketDisconnect:
+        pass
+    finally:
+        async with _state_lock:
+            if _audio_publishers.get(un) is websocket:
+                del _audio_publishers[un]
+
+
+@router.websocket("/ws/live/audio/watch/{username}")
+async def ws_audio_watch(websocket: WebSocket, username: str):
+    await websocket.accept()
+    un = username.strip()
+    if not un:
+        await websocket.close(code=1008)
+        return
+    async with _state_lock:
+        _audio_viewers[un].append(websocket)
+    sr = _audio_sr.get(un)
+    if sr:
+        try:
+            await websocket.send_text(
+                json.dumps({"type": "audio_cfg", "sample_rate": sr})
+            )
+        except Exception:
+            pass
+    try:
+        while True:
+            await websocket.receive()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        async with _state_lock:
+            lst = _audio_viewers.get(un)
             if lst and websocket in lst:
                 lst.remove(websocket)

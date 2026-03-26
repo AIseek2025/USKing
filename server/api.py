@@ -39,7 +39,13 @@ from .config import (
     ALLOWED_MEDIA_EXT,
 )
 from .routes_us_market import router as _us_market_router
-from .live_broadcast import router as _live_ws_router, username_has_frame, mark_user_live, clear_user_frame
+from .live_broadcast import (
+    router as _live_ws_router,
+    username_has_frame,
+    mark_user_live,
+    clear_user_frame,
+    disconnect_live_audio_room,
+)
 
 router = APIRouter(prefix="/api")
 router.include_router(_us_market_router)
@@ -764,13 +770,14 @@ def start_stream(req: StreamUpdate, user: User = Depends(require_user), db: Sess
 
 
 @router.post("/live/stop")
-def stop_stream(user: User = Depends(require_user), db: Session = Depends(get_db)):
+async def stop_stream(user: User = Depends(require_user), db: Session = Depends(get_db)):
     stream = db.query(LiveStream).filter(LiveStream.user_id == user.id, LiveStream.is_live == True).first()
     if stream:
         stream.is_live = False
         stream.ended_at = utcnow()
         db.commit()
     clear_user_frame(user.username, user.id)
+    await disconnect_live_audio_room(user.username)
     return {"ok": True}
 
 

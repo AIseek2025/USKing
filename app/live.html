@@ -248,6 +248,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
       </div>
     </div>
 
+    <!-- Live audio (site viewers) -->
+    <div class="panel-sec">
+      <h3>直播声音（站内观众）</h3>
+      <p class="hint" style="text-align:left;margin-bottom:8px;line-height:1.55">勾选「画面声音」时，请在系统共享对话框中允许音频；已添加的窗口需先移除再重新添加才会带上声音。</p>
+      <label class="setting-row" style="cursor:pointer;user-select:none"><input type="checkbox" id="capPageAudio" style="margin-right:8px" /> 采集画面 / 系统声音</label>
+      <label class="setting-row" style="cursor:pointer;user-select:none"><input type="checkbox" id="capMicAudio" checked style="margin-right:8px" /> 采集麦克风</label>
+    </div>
+
     <!-- Go Live -->
     <div class="go-live">
       <button class="btn-live ready" id="btnLive" disabled onclick="toggleLive()">
@@ -287,6 +295,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
   </div>
 </div>
 
+<script src="/static/js/live-audio.js?v=1"></script>
 <script>
 const sources = [];
 let compositeRAF = null;
@@ -301,6 +310,8 @@ let framePushTimer = null;
 let framePushInFlight = false;
 let streamCanvas = null;
 let streamCtx = null;
+let liveAudioPub = null;
+let micStream = null;
 
 const canvas = document.getElementById('compositeCanvas');
 const ctx = canvas.getContext('2d');
@@ -348,9 +359,10 @@ function setLayout(key) {
 
 async function addSource() {
   try {
+    const capPage = document.getElementById('capPageAudio')?.checked;
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { cursor: 'always', frameRate: 30 },
-      audio: false,
+      audio: !!capPage,
       preferCurrentTab: false
     });
 
@@ -650,6 +662,31 @@ async function toggleLive() {
     updatePlatStatus();
     startFramePushToSite();
 
+    if (typeof USKingLiveAudio !== 'undefined') {
+      micStream = null;
+      if (document.getElementById('capMicAudio')?.checked) {
+        try {
+          micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch (e) {
+          console.warn('麦克风未授权:', e);
+        }
+      }
+      let pageAudioStream = null;
+      for (const s of sources) {
+        if (s.stream.getAudioTracks && s.stream.getAudioTracks().length) {
+          pageAudioStream = s.stream;
+          break;
+        }
+      }
+      let audioTok = null;
+      try {
+        audioTok = localStorage.getItem('token');
+      } catch (e) {}
+      if (liveAudioPub) liveAudioPub.stop();
+      liveAudioPub = new USKingLiveAudio.Publisher(audioTok || '');
+      liveAudioPub.start(pageAudioStream, micStream);
+    }
+
     try {
       const cap = canvas.captureStream(30);
       mediaRecorder = new MediaRecorder(cap, { mimeType: 'video/webm;codecs=vp9' });
@@ -660,6 +697,14 @@ async function toggleLive() {
   } else {
     isLive = false;
     stopFramePushToSite();
+    if (liveAudioPub) {
+      liveAudioPub.stop();
+      liveAudioPub = null;
+    }
+    if (micStream) {
+      micStream.getTracks().forEach((t) => t.stop());
+      micStream = null;
+    }
     try {
       await fetch(location.origin + '/api/live/stop', { method: 'POST', credentials: 'include' });
     } catch (e) {}

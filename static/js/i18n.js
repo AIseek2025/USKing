@@ -122,9 +122,16 @@ const I18N = {
     'dash.bitrate': { zh: '码率', en: 'Bitrate' },
     'dash.stream_url_label': { zh: '直播链接', en: 'Stream URL' },
     'dash.viewer_video_note': {
-      zh: '说明：观众端轮询 /api/live/last-frame/ 拉最新画面，主播端 POST push-frame；一般无需 WebSocket。请保持采集页打开并「开始直播」。大并发建议后续 HLS/CDN。',
-      en: 'Viewers poll /api/live/last-frame/; host POSTs push-frame; usually no WebSocket. Keep capture tab on air. For scale, use HLS/CDN.',
+      zh: '说明：观众端轮询 last-frame 看画面；可选 WebSocket 收双路声音（画面系统音 + 麦克风）。主播需在侧栏勾选声音选项并开始直播。大并发建议后续 HLS/CDN。',
+      en: 'Viewers poll last-frame for video; optional WebSocket carries page + mic audio when the host enables it. For scale, use HLS/CDN.',
     },
+    'dash.audio_h': { zh: '站内直播声音', en: 'In-site live audio' },
+    'dash.audio_hint_live': {
+      zh: '共享窗口时在系统对话框中开启音频；修改选项后请移除窗口并重新添加。',
+      en: 'Enable audio in the OS share dialog; re-add the window after changing these options.',
+    },
+    'dash.cap_page_audio': { zh: '采集画面/系统声音', en: 'Capture tab/system audio' },
+    'dash.cap_mic_audio': { zh: '采集麦克风', en: 'Capture microphone' },
     'dash.copy_btn': { zh: '复制', en: 'Copy' },
     'dash.layout_auto': { zh: '自动', en: 'Auto' },
     'dash.layout_side': { zh: '左右', en: 'Side by side' },
@@ -170,6 +177,13 @@ const I18N = {
     'watch.offline': { zh: '当前没有在直播', en: 'Currently not streaming' },
     'watch.view_profile': { zh: '查看个人主页', en: 'View Profile' },
     'watch.viewers': { zh: '人观看', en: ' viewers' },
+    'watch.audio_unlock': { zh: '点击开启声音', en: 'Tap to enable audio' },
+    'watch.audio_page': { zh: '画面/系统音', en: 'Tab/system' },
+    'watch.audio_mic': { zh: '麦克风', en: 'Mic' },
+    'watch.audio_hint_bar': {
+      zh: '可单独开关两路声音；需先点击开启（浏览器要求）。',
+      en: 'Toggle each channel; tap Enable first (browser policy).',
+    },
 
     // === Profile ===
     'profile.posts': { zh: '作品集', en: 'Portfolio' },
