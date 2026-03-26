@@ -1320,7 +1320,11 @@ async function startStream(){
           }
         }
       }
-    }catch(e){console.warn('LiveKit host',e);}
+    }catch(e){
+      console.error('[LK:host] connect failed →', e && e.message || e);
+      var lkErr=document.getElementById('liveErr');
+      if(lkErr){lkErr.textContent='WebRTC: '+(e&&e.message||'连接失败，回退到低延迟模式');lkErr.style.display='block';}
+    }
     if(!usedLiveKit){
       dashStartFramePushToSite();
       if(typeof USKingLiveAudio!=='undefined'){
