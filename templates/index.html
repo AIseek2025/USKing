@@ -828,13 +828,21 @@ async function initDashboard(){
           <h3 style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px" data-i18n="dash.layout_h">布局</h3>
           <div id="dashLayoutGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px"></div>
         </div>
+        <div style="padding:12px 14px;border-bottom:1px solid var(--bg3)">
+          <h3 style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px" data-i18n="dash.prog_h">节目布局</h3>
+          <p style="font-size:10px;color:var(--text3);line-height:1.5;margin-bottom:8px" data-i18n="dash.prog_hint">先添加窗口或开启摄像头。</p>
+          <div id="dashProgLayoutGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:10px"></div>
+          <button type="button" id="dashCamBtn" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--accent);background:rgba(245,158,11,.08);color:var(--accent);font-size:12px;font-weight:600;cursor:pointer;margin-bottom:8px" data-i18n="dash.cam_on">开启摄像头</button>
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);cursor:pointer;margin-bottom:6px;user-select:none"><input type="checkbox" id="dashShowScreen" checked onchange="dashSetShowScreen(this.checked)" /> <span data-i18n="dash.show_screen">显示网页画面</span></label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);cursor:pointer;user-select:none"><input type="checkbox" id="dashShowCam" checked onchange="dashSetShowCam(this.checked)" /> <span data-i18n="dash.show_cam">显示摄像头</span></label>
+        </div>
         <!-- Platforms -->
         <div style="padding:12px 14px;border-bottom:1px solid var(--bg3)">
           <h3 style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px" data-i18n="dash.restream_h">多平台推流</h3>
           <div id="dashPlatList" style="display:flex;flex-direction:column;gap:6px"></div>
           <button type="button" onclick="dashAddPlatform()" style="width:100%;margin-top:8px;padding:7px;border:1.5px dashed var(--bg4);border-radius:6px;background:none;color:var(--text3);font-size:11px;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--bg4)';this.style.color='var(--text3)'" data-i18n="dash.add_platform">+ 添加平台</button>
         </div>
-        <!-- Live audio (in-site viewers) -->
+        <!-- Live audio (legacy fallback viewers) -->
         <div style="padding:12px 14px;border-bottom:1px solid var(--bg3)">
           <h3 style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px" data-i18n="dash.audio_h">站内直播声音</h3>
           <p style="font-size:10px;color:var(--text3);line-height:1.5;margin-bottom:8px" data-i18n="dash.audio_hint_live">共享窗口时在系统对话框中开启音频；修改选项后请移除窗口并重新添加。</p>
@@ -860,6 +868,7 @@ async function initDashboard(){
     </div>`;
   if(typeof I18N!=='undefined') I18N.apply();
   dashBuildLayouts();
+  if(typeof dashBuildProgLayouts==='function') dashBuildProgLayouts();
   dashRenderPlats();
   try{
     const r=await APP.api('GET',`/api/live/user/${APP.user.username}`);
@@ -895,6 +904,7 @@ function dashRefreshI18n(){
   if(b1) b1.textContent=_t('dash.btn_start');
   if(b2) b2.textContent=_t('dash.btn_stop');
   if(typeof dashBuildLayouts==='function') dashBuildLayouts();
+  if(typeof dashBuildProgLayouts==='function') dashBuildProgLayouts();
   if(typeof dashRenderPlats==='function') dashRenderPlats();
   if(typeof dashUpdateUI==='function') dashUpdateUI();
 }
@@ -902,7 +912,8 @@ function dashRefreshI18n(){
 /* Capture engine (embedded) */
 let _dSources=[], _dRAF=null, _dLayout='auto', _dLive=false, _dStart=0, _dTimerInt=null;
 let _dFramePushTimer=null, _dFramePushInFlight=false, _dStreamCanvas=null, _dStreamCtx=null;
-let _dMicStream=null, _dLiveAudioPub=null;
+let _dMicStream=null, _dLiveAudioPub=null, _dLiveKitRoom=null;
+var _dProgMode='webMain_camPip', _dCamStream=null, _dCamVideo=null, _dShowScreen=true, _dShowCam=true, _dOff=null;
 const _dLAYOUTS={
   single:{cells:n=>[{x:0,y:0,w:1,h:1}]},
   sideBySide:{cells:n=>[{x:0,y:0,w:.5,h:1},{x:.5,y:0,w:.5,h:1}]},
@@ -924,6 +935,92 @@ function dashBuildLayouts(){
     else inner='<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;width:100%;height:100%"><div style="background:var(--bg4);border-radius:1px"></div><div style="background:var(--bg4);border-radius:1px"></div><div style="background:var(--bg4);border-radius:1px"></div><div style="background:var(--bg4);border-radius:1px"></div></div>';
     return `<div onclick="_dLayout='${k}';dashBuildLayouts()" style="aspect-ratio:16/10;border:1px solid var(--bg4);border-radius:5px;background:var(--bg3);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:2px;${k===_dLayout?'border-color:var(--accent);background:rgba(245,158,11,.06)':''}" title="${labels[k]}">${inner}</div>`;
   }).join('');
+}
+
+function dashSetShowScreen(v){_dShowScreen=!!v;}
+function dashSetShowCam(v){_dShowCam=!!v;}
+
+function dashBuildProgLayouts(){
+  const g=document.getElementById('dashProgLayoutGrid');if(!g)return;
+  const keys=['webMain_camPip','camMain_webPip','split50'];
+  const labels={webMain_camPip:_t('dash.prog_web_pip'),camMain_webPip:_t('dash.prog_cam_pip'),split50:_t('dash.prog_split')};
+  g.innerHTML=keys.map(function(k){
+    const on=k===_dProgMode;
+    return `<div onclick="_dProgMode='${k}';dashBuildProgLayouts()" style="aspect-ratio:16/10;border:1px solid var(--bg4);border-radius:5px;background:var(--bg3);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:4px;font-size:9px;color:var(--text2);text-align:center;line-height:1.2;${on?'border-color:var(--accent);background:rgba(245,158,11,.06)':''}" title="${labels[k]}">${labels[k]}</div>`;
+  }).join('');
+  const btn=document.getElementById('dashCamBtn');
+  if(btn){
+    btn.textContent=_dCamStream?_t('dash.cam_off'):_t('dash.cam_on');
+    btn.onclick=function(){dashToggleCamera();};
+  }
+  const ds=document.getElementById('dashShowScreen');if(ds)ds.checked=_dShowScreen;
+  const dc=document.getElementById('dashShowCam');if(dc)dc.checked=_dShowCam;
+}
+
+function dashEnsureOffscreen(w,h){
+  if(!_dOff)_dOff=document.createElement('canvas');
+  if(_dOff.width!==w||_dOff.height!==h){_dOff.width=w;_dOff.height=h;}
+  return _dOff.getContext('2d');
+}
+
+/** 在矩形内绘制所有窗口源（与原先全画布逻辑一致，坐标相对于 ox,oy,rw,rh） */
+function dashDrawWebLayer(ctx,ox,oy,rw,rh){
+  if(!_dSources.length||!_dShowScreen)return;
+  const layout=_dLAYOUTS[_dLayout]||_dLAYOUTS.auto;
+  const cells=layout.cells(_dSources.length);
+  const gap=4;
+  _dSources.forEach(function(src,i){
+    if(i>=cells.length)return;
+    const c=cells[i];
+    const cx=ox+Math.round(c.x*rw)+gap,cy=oy+Math.round(c.y*rh)+gap,cw=Math.round(c.w*rw)-gap*2,ch=Math.round(c.h*rh)-gap*2;
+    ctx.save();ctx.beginPath();_dRR(ctx,cx,cy,cw,ch,6);ctx.clip();
+    const vw=src.video.videoWidth||src.width,vh=src.video.videoHeight||src.height;
+    const sc=Math.min(cw/vw,ch/vh),dw=vw*sc,dh=vh*sc,dx=cx+(cw-dw)/2,dy=cy+(ch-dh)/2;
+    ctx.fillStyle='#000';ctx.fillRect(cx,cy,cw,ch);
+    try{ctx.drawImage(src.video,dx,dy,dw,dh)}catch(e){}
+    ctx.restore();
+    ctx.fillStyle='rgba(0,0,0,.55)';_dRRF(ctx,cx+6,cy+6,Math.min(180,cw-12),20,4);
+    ctx.fillStyle='#fff';ctx.font='600 10px -apple-system,sans-serif';ctx.fillText(src.label.substring(0,28),cx+12,cy+19);
+  });
+}
+
+function dashDrawCamInRect(ctx,cx,cy,cw,ch){
+  if(!_dCamVideo)return;
+  ctx.save();ctx.beginPath();_dRR(ctx,cx,cy,cw,ch,6);ctx.clip();
+  const vw=_dCamVideo.videoWidth||1280,vh=_dCamVideo.videoHeight||720;
+  const sc=Math.min(cw/vw,ch/vh),dw=vw*sc,dh=vh*sc,dx=cx+(cw-dw)/2,dy=cy+(ch-dh)/2;
+  ctx.fillStyle='#000';ctx.fillRect(cx,cy,cw,ch);
+  try{ctx.drawImage(_dCamVideo,dx,dy,dw,dh)}catch(e){}
+  ctx.restore();
+}
+
+async function dashEnsureCamera(){
+  if(_dCamStream&&_dCamVideo)return;
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},facingMode:'user'},audio:false});
+    _dCamStream=stream;
+    const v=document.createElement('video');
+    v.srcObject=stream;v.muted=true;v.playsInline=true;
+    await v.play();
+    _dCamVideo=v;
+    dashUpdateUI();dashStartComposite();
+    dashBuildProgLayouts();
+  }catch(e){
+    alert(typeof _t==='function'?_t('dash.cam_denied'):String(e));
+  }
+}
+
+function dashStopCamera(){
+  if(_dCamStream){_dCamStream.getTracks().forEach(function(t){t.stop();});_dCamStream=null;}
+  _dCamVideo=null;
+  dashUpdateUI();
+  if(!_dSources.length)dashStopComposite();
+  dashBuildProgLayouts();
+}
+
+async function dashToggleCamera(){
+  if(_dCamStream)dashStopCamera();
+  else await dashEnsureCamera();
 }
 
 /* Platform streaming config */
@@ -1029,14 +1126,15 @@ function dashRemoveSource(id){
   const idx=_dSources.findIndex(s=>s.id===id);if(idx===-1)return;
   _dSources[idx].stream.getTracks().forEach(t=>t.stop());
   _dSources.splice(idx,1);dashUpdateUI();
-  if(!_dSources.length)dashStopComposite();
+  if(!_dSources.length&&!_dCamStream)dashStopComposite();
 }
 
 function dashUpdateUI(){
   const ph=document.getElementById('dashPlaceholder');
   const cv=document.getElementById('dashCanvas');
-  if(ph)ph.style.display=_dSources.length?'none':'';
-  if(cv)cv.style.display=_dSources.length?'':'none';
+  const hasAny=_dSources.length||(_dCamStream&&_dCamVideo);
+  if(ph)ph.style.display=hasAny?'none':'';
+  if(cv)cv.style.display=hasAny?'':'none';
   const list=document.getElementById('dashSrcList');
   if(list){
     list.innerHTML=_dSources.map(s=>{
@@ -1060,27 +1158,33 @@ function dashStartComposite(){
   const ctx=cv.getContext('2d');
   const W=1920,H=1080;cv.width=W;cv.height=H;
   let lt=0,fc=0;
+  const gap=8,pipW=Math.round(W*0.28),pipH=Math.round(H*0.32),pipX=W-pipW-gap,pipY=H-pipH-gap;
   function draw(ts){
     _dRAF=requestAnimationFrame(draw);
     fc++;
     if(ts-lt>=1000){const fps=fc;fc=0;lt=ts;const f=document.getElementById('dashFps');if(f)f.textContent=fps+' fps'}
     ctx.fillStyle='#161823';ctx.fillRect(0,0,W,H);
-    if(!_dSources.length)return;
-    const layout=_dLAYOUTS[_dLayout]||_dLAYOUTS.auto;
-    const cells=layout.cells(_dSources.length);
-    _dSources.forEach((src,i)=>{
-      if(i>=cells.length)return;
-      const c=cells[i],gap=4;
-      const cx=Math.round(c.x*W)+gap,cy=Math.round(c.y*H)+gap,cw=Math.round(c.w*W)-gap*2,ch=Math.round(c.h*H)-gap*2;
-      ctx.save();ctx.beginPath();_dRR(ctx,cx,cy,cw,ch,6);ctx.clip();
-      const vw=src.video.videoWidth||src.width,vh=src.video.videoHeight||src.height;
-      const sc=Math.min(cw/vw,ch/vh),dw=vw*sc,dh=vh*sc,dx=cx+(cw-dw)/2,dy=cy+(ch-dh)/2;
-      ctx.fillStyle='#000';ctx.fillRect(cx,cy,cw,ch);
-      try{ctx.drawImage(src.video,dx,dy,dw,dh)}catch(e){}
-      ctx.restore();
-      ctx.fillStyle='rgba(0,0,0,.55)';_dRRF(ctx,cx+6,cy+6,Math.min(180,cw-12),20,4);
-      ctx.fillStyle='#fff';ctx.font='600 10px -apple-system,sans-serif';ctx.fillText(src.label.substring(0,28),cx+12,cy+19);
-    });
+    const hasWeb=_dSources.length>0&&_dShowScreen;
+    const hasCam=!!(_dCamStream&&_dCamVideo&&_dShowCam);
+    if(!hasWeb&&!hasCam)return;
+    if(hasWeb&&!hasCam){
+      dashDrawWebLayer(ctx,0,0,W,H);
+    }else if(!hasWeb&&hasCam){
+      dashDrawCamInRect(ctx,0,0,W,H);
+    }else if(_dProgMode==='webMain_camPip'){
+      dashDrawWebLayer(ctx,0,0,W,H);
+      dashDrawCamInRect(ctx,pipX,pipY,pipW,pipH);
+    }else if(_dProgMode==='camMain_webPip'){
+      dashDrawCamInRect(ctx,0,0,W,H);
+      const octx=dashEnsureOffscreen(pipW,pipH);
+      octx.fillStyle='#161823';octx.fillRect(0,0,pipW,pipH);
+      dashDrawWebLayer(octx,0,0,pipW,pipH);
+      try{ctx.drawImage(_dOff,pipX,pipY)}catch(e){}
+    }else{
+      const half=Math.floor(W/2);
+      dashDrawWebLayer(ctx,0,0,half,H);
+      dashDrawCamInRect(ctx,half,0,W-half,H);
+    }
     ctx.globalAlpha=.3;ctx.fillStyle='#f59e0b';ctx.font='bold 12px -apple-system,sans-serif';ctx.fillText(typeof _t==='function'?_t('dash.watermark'):'USKing · Live',W-140,H-14);ctx.globalAlpha=1;
   }
   _dRAF=requestAnimationFrame(draw);
@@ -1096,13 +1200,14 @@ function dashEnsureStreamCanvas(){
     _dStreamCtx=_dStreamCanvas.getContext('2d');
   }
 }
-/** 与 /app/live.html 一致：站内观众靠 POST push-frame 收画面（SPA 后台也必须推） */
+/** 与 /app/live.html 一致：legacy fallback 仍靠 POST push-frame 收画面（SPA 后台也必须推） */
 function dashStartFramePushToSite(){
   dashEnsureStreamCanvas();
   if(_dFramePushTimer)clearInterval(_dFramePushTimer);
   _dFramePushInFlight=false;
   _dFramePushTimer=setInterval(()=>{
-    if(!_dLive||!_dSources.length||_dFramePushInFlight)return;
+    if(!_dLive||_dFramePushInFlight)return;
+    if(!_dSources.length&&!_dCamStream)return;
     const cv=document.getElementById('dashCanvas');
     if(!cv||!cv.width)return;
     try{_dStreamCtx.drawImage(cv,0,0,960,540)}catch(e){return}
@@ -1135,24 +1240,58 @@ async function startStream(){
     document.getElementById('btnStart').style.display='none';
     document.getElementById('btnStop').style.display='';
     _dLive=true;
-    dashStartFramePushToSite();
     _dMicStream=null;
     if(document.getElementById('dashCapMicAudio')&&document.getElementById('dashCapMicAudio').checked){
       try{_dMicStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});}catch(e){console.warn('mic',e);}
     }
-    var pageAud=null;
+    var pageAud=null,pageAudTrack=null;
     for(var si=0;si<_dSources.length;si++){
-      if(_dSources[si].stream.getAudioTracks&&_dSources[si].stream.getAudioTracks().length){pageAud=_dSources[si].stream;break;}
+      if(_dSources[si].stream.getAudioTracks&&_dSources[si].stream.getAudioTracks().length){
+        pageAud=_dSources[si].stream;
+        pageAudTrack=_dSources[si].stream.getAudioTracks()[0];
+        break;
+      }
     }
-    if(typeof USKingLiveAudio!=='undefined'){
-      if(_dLiveAudioPub){_dLiveAudioPub.stop();_dLiveAudioPub=null;}
-      _dLiveAudioPub=new USKingLiveAudio.Publisher((APP.token)||'');
-      _dLiveAudioPub.start(pageAud,_dMicStream);
+    var micTrack=_dMicStream&&_dMicStream.getAudioTracks&&_dMicStream.getAudioTracks().length?_dMicStream.getAudioTracks()[0]:null;
+    var usedLiveKit=false;
+    try{
+      var cfg=await APP.api('GET','/api/live/media/config');
+      var wantLk=cfg.backend==='livekit'&&cfg.livekit&&cfg.livekit.ready&&(cfg.publish_mode==='webrtc'||cfg.publish_mode==='livekit');
+      if(wantLk&&typeof USKingLiveKit!=='undefined'){
+        var hs=await APP.api('POST','/api/live/media/host-session');
+        var lk=hs.session&&hs.session.livekit;
+        if(lk&&lk.token){
+          await USKingLiveKit.loadScript();
+          var cv=document.getElementById('dashCanvas');
+          if(cv&&cv.width){
+            var cap=cv.captureStream(30);
+            var vtrack=cap.getVideoTracks()[0];
+            _dLiveKitRoom=await USKingLiveKit.hostConnect({
+              url:lk.ws_url,token:lk.token,videoTrack:vtrack,
+              audioPageTrack:pageAudTrack,audioMicTrack:micTrack
+            });
+            usedLiveKit=true;
+          }
+        }
+      }
+    }catch(e){console.warn('LiveKit host',e);}
+    if(!usedLiveKit){
+      dashStartFramePushToSite();
+      if(typeof USKingLiveAudio!=='undefined'){
+        if(_dLiveAudioPub){_dLiveAudioPub.stop();_dLiveAudioPub=null;}
+        _dLiveAudioPub=new USKingLiveAudio.Publisher((APP.token)||'');
+        _dLiveAudioPub.start(pageAud,_dMicStream);
+      }
     }
   }catch(e){if(err){err.textContent=e.message;err.style.display='block'}}
 }
 async function stopStream(){
   _dLive=false;
+  if(typeof dashStopCamera==='function')dashStopCamera();
+  if(typeof USKingLiveKit!=='undefined'&&_dLiveKitRoom){
+    try{USKingLiveKit.disconnect(_dLiveKitRoom);}catch(e){}
+    _dLiveKitRoom=null;
+  }
   dashStopFramePushToSite();
   if(_dLiveAudioPub){_dLiveAudioPub.stop();_dLiveAudioPub=null;}
   if(_dMicStream){_dMicStream.getTracks().forEach(function(t){t.stop();});_dMicStream=null;}

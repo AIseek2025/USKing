@@ -53,6 +53,21 @@ SEC_HTTP_USER_AGENT = os.getenv(
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "").strip()
 ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY", "").strip()
 
+# 直播媒体平面：legacy_jpeg 仅用于 fallback / 诊断；正式方案建议 livekit/agora 等实时媒体后端
+LIVE_MEDIA_BACKEND = os.getenv("LIVE_MEDIA_BACKEND", "legacy_jpeg").strip().lower()
+LIVE_PUBLISH_MODE = os.getenv("LIVE_PUBLISH_MODE", "legacy_jpeg").strip().lower()
+LIVE_PLAYBACK_MODE = os.getenv("LIVE_PLAYBACK_MODE", "legacy_jpeg").strip().lower()
+LIVE_FALLBACK_ENABLED = os.getenv("LIVE_FALLBACK_ENABLED", "true").lower() in ("1", "true", "yes")
+LIVE_FALLBACK_MODE = os.getenv("LIVE_FALLBACK_MODE", "legacy_jpeg").strip().lower()
+LIVE_SIGNALING_URL = os.getenv("LIVE_SIGNALING_URL", "").strip()
+LIVE_HLS_BASE_URL = os.getenv("LIVE_HLS_BASE_URL", "").strip()
+LIVE_TURN_URLS = [
+    u.strip() for u in os.getenv("LIVE_TURN_URLS", "").split(",") if u.strip()
+]
+LIVEKIT_WS_URL = os.getenv("LIVEKIT_WS_URL", "").strip()
+LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "").strip()
+LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "").strip()
+
 _BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 # 生产可挂载卷并设置 UPLOAD_DIR=/data/uploads（须为绝对路径）
 _UP = os.getenv("UPLOAD_DIR", "").strip()

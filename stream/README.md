@@ -1,22 +1,24 @@
-# stream — 编码与多平台推流
+# stream — 编码、导出与多平台分发
 
-- 接收合成后的视频（及可选音频）
-- 编码（如 H.264）
-- **多平台同步推流（Simulcast）**：同一路编码流同时推送到多个 RTMP 端点
+- 接收主节目（视频 + 混音后音频）
+- 编码（H.264 / AAC 等）
+- **多平台同步推流（Simulcast）**
+- HLS 打包
+- 录制与对象存储
 
 ## 支持平台
-
 - YouTube Live (`rtmp://a.rtmp.youtube.com/live2/`)
 - TikTok Live
 - Twitch (`rtmp://live.twitch.tv/app/`)
 - Bilibili (`rtmp://live-push.bilivideo.com/live-bvc/`)
-- 自建平台（RTMP/SRT/WebRTC）
+- 自建平台（RTMP / HLS / WebRTC）
 - 任意自定义 RTMP 地址
 
-## 实现思路
+## 推荐实现
+1. **LiveKit Egress + FFmpeg**
+2. **FFmpeg tee muxer**：一次编码、多路输出
+3. **中继服务**：SRS / 云直播 / relay
 
-1. **FFmpeg tee muxer**：一次编码、多路输出，开销最低
-2. **多线程分发**：编码包通过内部队列复制到 N 个推流线程
-3. **中继服务**：本地推一路到 Nginx-RTMP / SRS，由服务端 relay 到各平台
-
-主播端通过 app 模块配置各平台 Stream Key 并按需启停。
+## 约束
+- 当前仓库中的 `server/live_broadcast.py` 不是正式 stream 模块，只是 fallback 链路
+- 正式编码与导出应在独立媒体平面完成，不放在 FastAPI 业务进程中

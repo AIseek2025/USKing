@@ -137,6 +137,20 @@ const I18N = {
     'dash.layout_side': { zh: '左右', en: 'Side by side' },
     'dash.layout_pip': { zh: '画中画', en: 'PiP' },
     'dash.layout_grid': { zh: '网格', en: 'Grid' },
+    'dash.prog_h': { zh: '节目布局（网页+摄像头）', en: 'Program (screen + camera)' },
+    'dash.prog_hint': {
+      zh: '先添加窗口或开启摄像头；可切换主副画面与左右分屏。',
+      en: 'Add a window and/or turn on the camera; then pick layout.',
+    },
+    'dash.prog_web_pip': { zh: '网页主·摄像小窗', en: 'Screen main · cam PiP' },
+    'dash.prog_cam_pip': { zh: '摄像主·网页小窗', en: 'Cam main · screen PiP' },
+    'dash.prog_split': { zh: '左右各半', en: '50/50 split' },
+    'dash.cam_section': { zh: '摄像头', en: 'Camera' },
+    'dash.cam_on': { zh: '开启摄像头', en: 'Turn on camera' },
+    'dash.cam_off': { zh: '关闭摄像头', en: 'Turn off camera' },
+    'dash.show_screen': { zh: '显示网页/桌面画面', en: 'Show screen capture' },
+    'dash.show_cam': { zh: '显示摄像头画面', en: 'Show camera' },
+    'dash.cam_denied': { zh: '无法访问摄像头，请检查浏览器权限。', en: 'Camera permission denied.' },
     'dash.plat_custom': { zh: '自定义', en: 'Custom' },
     'dash.fps_label': { zh: ' fps', en: ' fps' },
     'dash.push_login_expired': {
@@ -183,6 +197,15 @@ const I18N = {
     'watch.audio_hint_bar': {
       zh: '可单独开关两路声音；需先点击开启（浏览器要求）。',
       en: 'Toggle each channel; tap Enable first (browser policy).',
+    },
+    'watch.media_backend': { zh: '媒体后端', en: 'Media backend' },
+    'watch.playback_mode': { zh: '播放模式', en: 'Playback mode' },
+    'watch.mode_legacy_jpeg': { zh: '兼容预览（JPEG）', en: 'Legacy preview (JPEG)' },
+    'watch.mode_webrtc': { zh: '实时房间（WebRTC）', en: 'Realtime room (WebRTC)' },
+    'watch.mode_hls': { zh: '公开播放（HLS）', en: 'Public playback (HLS)' },
+    'watch.mode_note_fallback': {
+      zh: '当前房间启用了新媒体架构元数据，但页面仍可回退到 legacy 预览链路。',
+      en: 'This room exposes new media metadata, but the page can still fall back to the legacy preview path.',
     },
 
     // === Profile ===

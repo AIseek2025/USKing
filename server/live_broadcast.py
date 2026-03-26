@@ -1,11 +1,12 @@
 """
-站内直播：主播推送 JPEG，观众拉流。
+站内直播 fallback：主播推送 JPEG，观众拉流。
 
 - WebSocket（需 Nginx Upgrade）：/api/ws/live/publish、/api/ws/live/watch/{username}
 - HTTP：POST /api/live/push-frame（Cookie）；观众推荐轮询 GET /api/live/last-frame/{username}（单帧 JPEG，最耐缓冲）
 - 可选：GET /api/live/mjpeg/{username}（multipart 长连接，部分 Nginx 会缓冲导致首帧迟迟不出）
 
 约束：状态仅存进程内存；生产请 uvicorn --workers 1。
+说明：正式主链路应迁移到独立媒体平面（WebRTC/RTMP/HLS），本模块保留作 fallback / 诊断。
 """
 
 from __future__ import annotations

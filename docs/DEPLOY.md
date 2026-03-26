@@ -90,6 +90,13 @@ location /api/ws/ {
 
 ## 6. 可选能力
 
+- **媒体平面架构升级**：
+  - 业务层仍可使用当前 FastAPI 服务；
+  - 正式直播建议引入独立媒体平面（WebRTC/RTMP/HLS），详见 [docs/LIVE_ARCHITECTURE_UPGRADE.md](LIVE_ARCHITECTURE_UPGRADE.md)；
+  - 建议新增环境变量：`LIVE_MEDIA_BACKEND`、`LIVE_PLAYBACK_MODE`、`LIVE_SIGNALING_URL`、`LIVE_TURN_URLS`、`LIVE_HLS_BASE_URL`、`LIVEKIT_*`。
+- **Redis / PostgreSQL**：正式直播推荐使用 PostgreSQL 作为主业务库，Redis 承担在线态、presence、幂等与实时元数据。
+- **TURN/STUN**：若启用 WebRTC，生产必须部署 TURN（例如 coturn），并将地址通过 `LIVE_TURN_URLS` 暴露给客户端。
+- **LiveKit WebRTC**：设置 `LIVE_MEDIA_BACKEND=livekit`、`LIVE_PUBLISH_MODE=webrtc`、`LIVE_PLAYBACK_MODE=webrtc`，并填写 `LIVEKIT_WS_URL`（一般为 `wss://…`，与 LiveKit Server 可达），以及 `LIVEKIT_API_KEY`、`LIVEKIT_API_SECRET`（与服务器 `keys` 一致）。浏览器通过 `livekit-client` 连接；未配置或连接失败时仍可回退 `legacy_jpeg`（见 `LIVE_FALLBACK_ENABLED`）。
 - **Stripe**：会员支付需配置 `STRIPE_*` 与 Webhook。
 - **SMTP**：邮件验证码需配置 `SMTP_*`。
 - **OpenAI**：AI 客服需 `OPENAI_API_KEY`。

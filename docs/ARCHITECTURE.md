@@ -10,14 +10,21 @@
                                                           └─→ [其他 RTMP 平台...]
 ```
 
+## 当前实现与目标实现
+
+- **当前实现**：业务仓内的 `JPEG + polling + 进程内存 fanout`
+- **目标实现**：业务平面 + 媒体平面分离
+- **说明**：当前仓库中的 `server/live_broadcast.py` 应视为 fallback / 诊断链路，不再作为正式主链路长期扩展
+
 ## 模块职责（规划）
 
 | 模块 | 职责 | 备注 |
 |------|------|------|
-| **capture** | 按窗口/屏幕采集美股王、盈透等源 | 需支持多窗口枚举与选择；平台相关 API |
-| **composer** | 多路画面布局（网格、画中画等）、叠加层 | 输出单一视频帧流 |
-| **stream** | 编码（如 H.264）、**多平台同步推流** | 同一路编码流分发到 N 个 RTMP 端点 |
-| **app** | 主播端 UI：选窗口、预览、开播/停播、**多平台管理** | 桌面或 Web 控制台 |
+| **capture** | 按窗口/屏幕采集美股王、盈透、摄像头、系统音频、麦克风 | 浏览器做 MVP，桌面端补齐系统能力 |
+| **composer** | 多路画面布局（网格、画中画等）、叠加层 | 输出主节目 `MediaStream` |
+| **realtime-signaling** | 房间信令、TURN 协调、媒体会话下发 | 推荐与业务平面分离 |
+| **stream / media-egress** | 编码、录制、**多平台同步推流**、HLS 打包 | 同一路主节目导出到 RTMP/HLS |
+| **app** | 主播端 UI：选窗口、预览、开播/停播、**多平台管理** | 浏览器版先行，后续桌面端增强 |
 
 ## 多平台同步推流（Simulcast）
 
@@ -49,13 +56,14 @@
 - 每个目标只需填：平台类型 + Stream Key（或完整 RTMP URL）。
 - 实时显示各平台推流状态（连接中/推流中/断开/错误）。
 
-## 技术选型（待定）
+## 技术选型（建议）
 
-- **采集**：Windows（Win32、Graphics Capture API）、macOS（ScreenCaptureKit 或 AVFoundation）。
-- **合成与编码**：FFmpeg、GStreamer，或各平台原生 API。
-- **推流**：RTMP 为主（YouTube/TikTok/Twitch/Bilibili 等均支持）；自建平台可考虑 SRT 或 WebRTC 低延迟。
-- **多平台分发**：FFmpeg tee muxer / 多线程推流 / Nginx-RTMP relay。
-- **主播端**：Electron/Tauri（桌面）或浏览器 + Web API（如 getDisplayMedia）做原型。
+- **站内实时**：WebRTC SFU（优先 LiveKit）
+- **采集**：Windows（Graphics Capture / WASAPI）、macOS（ScreenCaptureKit / AVFoundation）；浏览器版用 `getDisplayMedia` / `getUserMedia`
+- **合成与编码**：浏览器 `canvas.captureStream()` 做 MVP；正式 egress 由 FFmpeg / LiveKit Egress 承担
+- **推流**：RTMP 为主（YouTube/TikTok/Twitch/Bilibili 等均支持）；自建平台回放与公播走 HLS
+- **多平台分发**：FFmpeg tee muxer / 独立 egress / 云直播服务
+- **主播端**：浏览器先行，长期建议 Electron/Tauri
 
 ## 多屏布局示例
 

@@ -46,6 +46,12 @@ from .live_broadcast import (
     clear_user_frame,
     disconnect_live_audio_room,
 )
+from .live_media import (
+    host_session_payload,
+    media_backend_summary,
+    stream_media_descriptor,
+    viewer_session_payload,
+)
 
 router = APIRouter(prefix="/api")
 router.include_router(_us_market_router)
@@ -751,6 +757,42 @@ async def upload_media(file: UploadFile = File(...), user: User = Depends(requir
 
 # --------------- Live Streaming ---------------
 
+
+@router.get("/live/media/config")
+def get_live_media_config():
+    """向前端暴露当前媒体平面配置，便于选择 legacy/WebRTC/HLS 逻辑。"""
+    return media_backend_summary()
+
+
+@router.post("/live/media/host-session")
+def get_live_host_session(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    stream = (
+        db.query(LiveStream)
+        .filter(LiveStream.user_id == user.id, LiveStream.is_live == True)
+        .first()
+    )
+    if not stream:
+        raise HTTPException(409, "未在直播中，请先开始直播")
+    return {"session": host_session_payload(user, stream)}
+
+
+@router.get("/live/media/viewer-session/{username}")
+def get_live_viewer_session(
+    username: str,
+    viewer: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    host = db.query(User).filter(User.username == username).first()
+    if not host:
+        raise HTTPException(404)
+    stream = (
+        db.query(LiveStream)
+        .filter(LiveStream.user_id == host.id, LiveStream.is_live == True)
+        .first()
+    )
+    return {"session": viewer_session_payload(host, stream, viewer)}
+
+
 @router.post("/live/start")
 def start_stream(req: StreamUpdate, user: User = Depends(require_user), db: Session = Depends(get_db)):
     if not user.live_enabled:
@@ -819,6 +861,7 @@ def get_user_stream(username: str, db: Session = Depends(get_db)):
         "stream": _stream_dict(stream) if stream else None,
         "user": _user_dict(user),
         "has_live_frame_buffer": username_has_frame(username),
+        "media": stream_media_descriptor(username, stream),
     }
 
 

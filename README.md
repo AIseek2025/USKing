@@ -59,6 +59,20 @@ git push -u origin main
 
 ---
 
+## 直播架构（当前与升级方向）
+
+- **当前 fallback**：浏览器采集 + Canvas 合成 + JPEG 推帧 + 站内轮询
+- **推荐主链路**：业务平面（FastAPI）+ 媒体平面（WebRTC/RTMP/HLS）
+- **媒体平面推荐**：LiveKit / 等价 SFU + egress
+
+详细方案见：
+- [docs/LIVE_ARCHITECTURE_UPGRADE.md](docs/LIVE_ARCHITECTURE_UPGRADE.md)
+- [docs/LIVE_ROLLOUT_PHASES.md](docs/LIVE_ROLLOUT_PHASES.md)
+- [docs/LIVE_GSTACK_COMPOSER2_EXECUTION.md](docs/LIVE_GSTACK_COMPOSER2_EXECUTION.md)
+- [docs/LIVE_GSTACK_COMPOSER2_QUICKSTART.md](docs/LIVE_GSTACK_COMPOSER2_QUICKSTART.md)
+- [docs/LIVE_GSTACK_WORK_RECORD.md](docs/LIVE_GSTACK_WORK_RECORD.md)（gstack 嵌入与迭代工作记录，可审计留底）
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
 ## 直播形式与内容
 
 | 来源 | 说明 |
@@ -75,6 +89,11 @@ git push -u origin main
 ├── templates/        # Jinja2 页面与 SPA 片段
 ├── static/           # 静态资源与上传目录（上传勿提交 Git）
 ├── app/              # 采集页等静态入口
+├── services/         # 规划中的媒体平面子服务说明
+├── infra/            # PostgreSQL / Redis / TURN 等基础设施说明
+├── capture/          # 采集模块边界说明
+├── composer/         # 合成模块边界说明
+├── stream/           # 编码与 egress 模块边界说明
 ├── requirements.txt
 ├── Dockerfile
 ├── docker-compose.prod.yml
@@ -97,6 +116,7 @@ git push -u origin main
 
 - **后端**：FastAPI、SQLAlchemy、JWT
 - **前端**：Jinja2 + 站内 SPA（`templates/index.html`）
-- **直播**：浏览器采集 + Canvas 合成（见站内「直播后台」）
+- **直播 fallback**：浏览器采集 + Canvas 合成 + JPEG/PCM 原型链路
+- **直播升级**：WebRTC（站内实时）、RTMP（平台分发）、HLS（大规模播放/回放）
 
 更多采集/推流规划见历史文档 `docs/REQUIREMENTS.md`（若存在）。

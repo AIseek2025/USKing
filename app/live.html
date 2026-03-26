@@ -198,6 +198,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
       <div class="layout-grid" id="layoutGrid"></div>
     </div>
 
+    <div class="panel-sec">
+      <h3>节目布局（网页+摄像头）</h3>
+      <p class="hint" style="text-align:left;margin-bottom:8px;line-height:1.55">先添加窗口或开启摄像头；可切换主副画面与左右分屏。</p>
+      <div class="layout-grid" id="progLayoutGrid" style="grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px"></div>
+      <button type="button" class="btn-add" id="camToggleBtn" style="margin-bottom:8px;border-style:solid" onclick="toggleCamera()">开启摄像头</button>
+      <label class="setting-row" style="cursor:pointer;user-select:none"><input type="checkbox" id="liveShowScreen" checked onchange="setShowScreen(this.checked)" style="margin-right:8px" /> 显示网页/桌面画面</label>
+      <label class="setting-row" style="cursor:pointer;user-select:none"><input type="checkbox" id="liveShowCam" checked onchange="setShowCam(this.checked)" style="margin-right:8px" /> 显示摄像头画面</label>
+    </div>
+
     <!-- Multi-platform streaming -->
     <div class="panel-sec">
       <h3>
@@ -248,7 +257,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
       </div>
     </div>
 
-    <!-- Live audio (site viewers) -->
+    <!-- Live audio (legacy fallback viewers) -->
     <div class="panel-sec">
       <h3>直播声音（站内观众）</h3>
       <p class="hint" style="text-align:left;margin-bottom:8px;line-height:1.55">勾选「画面声音」时，请在系统共享对话框中允许音频；已添加的窗口需先移除再重新添加才会带上声音。</p>
@@ -261,7 +270,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
       <button class="btn-live ready" id="btnLive" disabled onclick="toggleLive()">
         <span class="rec-dot"></span> 开始直播
       </button>
-      <p class="hint">添加至少一个窗口后点击开始直播：画面经 HTTP 同步给 /live 观众（无需 Nginx WebSocket；请保持本页打开）。</p>
+      <p class="hint">添加窗口或开启摄像头后可开播：画面经 HTTP 同步给 /live 观众（请保持本页打开）。</p>
     </div>
   </div>
 </div>
@@ -296,6 +305,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 </div>
 
 <script src="/static/js/live-audio.js?v=1"></script>
+<script src="/static/js/livekit-usking.js?v=1"></script>
 <script>
 const sources = [];
 let compositeRAF = null;
@@ -305,13 +315,20 @@ let timerInterval = null;
 let currentLayout = 'auto';
 let mediaRecorder = null;
 let recordedChunks = [];
-/** 站内直播：推 JPEG 到 /api/live/push-frame（普通 HTTP，无需 Nginx WebSocket） */
+/** legacy fallback：推 JPEG 到 /api/live/push-frame（普通 HTTP，无需 Nginx WebSocket） */
 let framePushTimer = null;
 let framePushInFlight = false;
 let streamCanvas = null;
 let streamCtx = null;
 let liveAudioPub = null;
 let micStream = null;
+let liveKitRoom = null;
+let progMode = 'webMain_camPip';
+let camStream = null;
+let camVideo = null;
+let showScreen = true;
+let showCam = true;
+let offCanvas = null;
 
 const canvas = document.getElementById('compositeCanvas');
 const ctx = canvas.getContext('2d');
@@ -336,6 +353,137 @@ const LAYOUTS = {
     return LAYOUTS.grid.cells(n);
   }}
 };
+
+function setShowScreen(v) { showScreen = !!v; }
+function setShowCam(v) { showCam = !!v; }
+
+function ensureOffscreen(w, h) {
+  if (!offCanvas) offCanvas = document.createElement('canvas');
+  if (offCanvas.width !== w || offCanvas.height !== h) {
+    offCanvas.width = w;
+    offCanvas.height = h;
+  }
+  return offCanvas.getContext('2d');
+}
+
+function drawWebLayer(ctx, ox, oy, rw, rh) {
+  if (!sources.length || !showScreen) return;
+  const layout = LAYOUTS[currentLayout] || LAYOUTS.auto;
+  const cells = layout.cells(sources.length);
+  const gap = 4;
+  sources.forEach((src, i) => {
+    if (i >= cells.length) return;
+    const c = cells[i];
+    const cx = ox + Math.round(c.x * rw) + gap;
+    const cy = oy + Math.round(c.y * rh) + gap;
+    const cw = Math.round(c.w * rw) - gap * 2;
+    const ch = Math.round(c.h * rh) - gap * 2;
+    ctx.save();
+    ctx.beginPath();
+    roundRect(ctx, cx, cy, cw, ch, 6);
+    ctx.clip();
+    const vw = src.video.videoWidth || src.width;
+    const vh = src.video.videoHeight || src.height;
+    const scale = Math.min(cw / vw, ch / vh);
+    const dw = vw * scale;
+    const dh = vh * scale;
+    const dx = cx + (cw - dw) / 2;
+    const dy = cy + (ch - dh) / 2;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(cx, cy, cw, ch);
+    try {
+      ctx.drawImage(src.video, dx, dy, dw, dh);
+    } catch (e) {}
+    ctx.restore();
+    ctx.fillStyle = 'rgba(0,0,0,.55)';
+    roundRectFill(ctx, cx + 6, cy + 6, Math.min(200, cw - 12), 22, 4);
+    ctx.fillStyle = '#fff';
+    ctx.font = '600 11px -apple-system, sans-serif';
+    ctx.fillText(src.label.substring(0, 28), cx + 12, cy + 20);
+  });
+}
+
+function drawCamInRect(ctx, cx, cy, cw, ch) {
+  if (!camVideo) return;
+  ctx.save();
+  ctx.beginPath();
+  roundRect(ctx, cx, cy, cw, ch, 6);
+  ctx.clip();
+  const vw = camVideo.videoWidth || 1280;
+  const vh = camVideo.videoHeight || 720;
+  const scale = Math.min(cw / vw, ch / vh);
+  const dw = vw * scale;
+  const dh = vh * scale;
+  const dx = cx + (cw - dw) / 2;
+  const dy = cy + (ch - dh) / 2;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(cx, cy, cw, ch);
+  try {
+    ctx.drawImage(camVideo, dx, dy, dw, dh);
+  } catch (e) {}
+  ctx.restore();
+}
+
+async function ensureCamera() {
+  if (camStream && camVideo) return;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+      audio: false,
+    });
+    camStream = stream;
+    const v = document.createElement('video');
+    v.srcObject = stream;
+    v.muted = true;
+    v.playsInline = true;
+    await v.play();
+    camVideo = v;
+    updateUI();
+    startComposite();
+    buildProgLayouts();
+  } catch (e) {
+    alert('无法访问摄像头，请检查浏览器权限。');
+  }
+}
+
+function stopCamera() {
+  if (camStream) {
+    camStream.getTracks().forEach((t) => t.stop());
+    camStream = null;
+  }
+  camVideo = null;
+  updateUI();
+  if (sources.length === 0) stopComposite();
+  buildProgLayouts();
+}
+
+async function toggleCamera() {
+  if (camStream) stopCamera();
+  else await ensureCamera();
+}
+
+function buildProgLayouts() {
+  const grid = document.getElementById('progLayoutGrid');
+  if (!grid) return;
+  const keys = ['webMain_camPip', 'camMain_webPip', 'split50'];
+  const labels = {
+    webMain_camPip: '网页主·摄像小窗',
+    camMain_webPip: '摄像主·网页小窗',
+    split50: '左右各半',
+  };
+  grid.innerHTML = keys
+    .map((k) => {
+      const active = k === progMode ? ' active' : '';
+      return `<div class="layout-btn${active}" onclick="progMode='${k}';buildProgLayouts()" style="font-size:9px;color:var(--text2);text-align:center;line-height:1.2;padding:6px" title="${labels[k]}">${labels[k]}</div>`;
+    })
+    .join('');
+  const btn = document.getElementById('camToggleBtn');
+  if (btn) btn.textContent = camStream ? '关闭摄像头' : '开启摄像头';
+  const ds = document.getElementById('liveShowScreen');
+  if (ds) ds.checked = showScreen;
+  const dc = document.getElementById('liveShowCam');
+  if (dc) dc.checked = showCam;
+}
 
 function buildLayoutButtons() {
   const grid = document.getElementById('layoutGrid');
@@ -405,13 +553,14 @@ function removeSource(id) {
   src.stream.getTracks().forEach(t => t.stop());
   sources.splice(idx, 1);
   updateUI();
-  if (sources.length === 0) stopComposite();
+  if (sources.length === 0 && !camStream) stopComposite();
 }
 
 function updateUI() {
   const placeholder = document.getElementById('placeholder');
-  placeholder.style.display = sources.length === 0 ? '' : 'none';
-  canvas.style.display = sources.length === 0 ? 'none' : '';
+  const hasAny = sources.length || (camStream && camVideo);
+  placeholder.style.display = hasAny ? 'none' : '';
+  canvas.style.display = hasAny ? '' : 'none';
 
   // Source cards with video preview in right panel
   const srcList = document.getElementById('srcList');
@@ -439,8 +588,7 @@ function updateUI() {
     }
   });
 
-  // Enable/disable live button
-  document.getElementById('btnLive').disabled = sources.length === 0;
+  document.getElementById('btnLive').disabled = !hasAny;
 }
 
 function startComposite() {
@@ -471,53 +619,37 @@ function startComposite() {
     ctx.fillStyle = '#0a0e17';
     ctx.fillRect(0, 0, W, H);
 
-    if (sources.length === 0) return;
+    const hasWeb = sources.length > 0 && showScreen;
+    const hasCam = !!(camStream && camVideo && showCam);
+    if (!hasWeb && !hasCam) return;
 
-    const layoutKey = currentLayout;
-    const layout = LAYOUTS[layoutKey] || LAYOUTS.auto;
-    const cells = layout.cells(sources.length);
+    const gap = 8;
+    const pipW = Math.round(W * 0.28);
+    const pipH = Math.round(H * 0.32);
+    const pipX = W - pipW - gap;
+    const pipY = H - pipH - gap;
 
-    const gap = 4;
-
-    sources.forEach((src, i) => {
-      if (i >= cells.length) return;
-      const cell = cells[i];
-      const cx = Math.round(cell.x * W) + gap;
-      const cy = Math.round(cell.y * H) + gap;
-      const cw = Math.round(cell.w * W) - gap * 2;
-      const ch = Math.round(cell.h * H) - gap * 2;
-
-      ctx.save();
-      ctx.beginPath();
-      roundRect(ctx, cx, cy, cw, ch, 6);
-      ctx.clip();
-
-      // Draw video frame, fit within cell
-      const vw = src.video.videoWidth || src.width;
-      const vh = src.video.videoHeight || src.height;
-      const scale = Math.min(cw / vw, ch / vh);
-      const dw = vw * scale;
-      const dh = vh * scale;
-      const dx = cx + (cw - dw) / 2;
-      const dy = cy + (ch - dh) / 2;
-
-      ctx.fillStyle = '#000';
-      ctx.fillRect(cx, cy, cw, ch);
-
+    if (hasWeb && !hasCam) {
+      drawWebLayer(ctx, 0, 0, W, H);
+    } else if (!hasWeb && hasCam) {
+      drawCamInRect(ctx, 0, 0, W, H);
+    } else if (progMode === 'webMain_camPip') {
+      drawWebLayer(ctx, 0, 0, W, H);
+      drawCamInRect(ctx, pipX, pipY, pipW, pipH);
+    } else if (progMode === 'camMain_webPip') {
+      drawCamInRect(ctx, 0, 0, W, H);
+      const octx = ensureOffscreen(pipW, pipH);
+      octx.fillStyle = '#0a0e17';
+      octx.fillRect(0, 0, pipW, pipH);
+      drawWebLayer(octx, 0, 0, pipW, pipH);
       try {
-        ctx.drawImage(src.video, dx, dy, dw, dh);
-      } catch(e) {}
-
-      ctx.restore();
-
-      // Label
-      ctx.fillStyle = 'rgba(0,0,0,.55)';
-      const lh = 22;
-      roundRectFill(ctx, cx + 6, cy + 6, Math.min(200, cw - 12), lh, 4);
-      ctx.fillStyle = '#fff';
-      ctx.font = '600 11px -apple-system, sans-serif';
-      ctx.fillText(src.label.substring(0, 28), cx + 12, cy + 20);
-    });
+        ctx.drawImage(offCanvas, pipX, pipY);
+      } catch (e) {}
+    } else {
+      const half = Math.floor(W / 2);
+      drawWebLayer(ctx, 0, 0, half, H);
+      drawCamInRect(ctx, half, 0, W - half, H);
+    }
 
     // Watermark
     ctx.globalAlpha = 0.3;
@@ -586,7 +718,8 @@ function startFramePushToSite() {
   if (framePushTimer) clearInterval(framePushTimer);
   framePushInFlight = false;
   framePushTimer = setInterval(() => {
-    if (!isLive || sources.length === 0 || framePushInFlight) return;
+    if (!isLive || framePushInFlight) return;
+    if (sources.length === 0 && !camStream) return;
     try {
       streamCtx.drawImage(canvas, 0, 0, 960, 540);
     } catch (e) { return; }
@@ -660,31 +793,83 @@ async function toggleLive() {
     liveStart = Date.now();
     timerInterval = setInterval(updateTimer, 1000);
     updatePlatStatus();
-    startFramePushToSite();
 
-    if (typeof USKingLiveAudio !== 'undefined') {
-      micStream = null;
-      if (document.getElementById('capMicAudio')?.checked) {
-        try {
-          micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        } catch (e) {
-          console.warn('麦克风未授权:', e);
-        }
-      }
-      let pageAudioStream = null;
-      for (const s of sources) {
-        if (s.stream.getAudioTracks && s.stream.getAudioTracks().length) {
-          pageAudioStream = s.stream;
-          break;
-        }
-      }
-      let audioTok = null;
+    micStream = null;
+    if (document.getElementById('capMicAudio')?.checked) {
       try {
-        audioTok = localStorage.getItem('token');
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      } catch (e) {
+        console.warn('麦克风未授权:', e);
+      }
+    }
+    let pageAudioStream = null;
+    let pageAudTrack = null;
+    for (const s of sources) {
+      if (s.stream.getAudioTracks && s.stream.getAudioTracks().length) {
+        pageAudioStream = s.stream;
+        pageAudTrack = s.stream.getAudioTracks()[0];
+        break;
+      }
+    }
+    const micTrack =
+      micStream && micStream.getAudioTracks && micStream.getAudioTracks().length
+        ? micStream.getAudioTracks()[0]
+        : null;
+
+    let usedLiveKit = false;
+    try {
+      const h = { Accept: 'application/json' };
+      try {
+        const tok = localStorage.getItem('token');
+        if (tok) h['Authorization'] = 'Bearer ' + tok;
       } catch (e) {}
-      if (liveAudioPub) liveAudioPub.stop();
-      liveAudioPub = new USKingLiveAudio.Publisher(audioTok || '');
-      liveAudioPub.start(pageAudioStream, micStream);
+      const cfgRes = await fetch(location.origin + '/api/live/media/config', {
+        credentials: 'include',
+        headers: h,
+      });
+      const cfg = await cfgRes.json();
+      const wantLk =
+        cfg.backend === 'livekit' &&
+        cfg.livekit &&
+        cfg.livekit.ready &&
+        (cfg.publish_mode === 'webrtc' || cfg.publish_mode === 'livekit');
+      if (wantLk && typeof USKingLiveKit !== 'undefined') {
+        const hsRes = await fetch(location.origin + '/api/live/media/host-session', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { ...h, 'Content-Type': 'application/json' },
+        });
+        const hs = await hsRes.json();
+        const lk = hs.session && hs.session.livekit;
+        if (lk && lk.token) {
+          await USKingLiveKit.loadScript();
+          const cap = canvas.captureStream(30);
+          const vtrack = cap.getVideoTracks()[0];
+          liveKitRoom = await USKingLiveKit.hostConnect({
+            url: lk.ws_url,
+            token: lk.token,
+            videoTrack: vtrack,
+            audioPageTrack: pageAudTrack,
+            audioMicTrack: micTrack,
+          });
+          usedLiveKit = true;
+        }
+      }
+    } catch (e) {
+      console.warn('LiveKit host', e);
+    }
+
+    if (!usedLiveKit) {
+      startFramePushToSite();
+      if (typeof USKingLiveAudio !== 'undefined') {
+        let audioTok = null;
+        try {
+          audioTok = localStorage.getItem('token');
+        } catch (e) {}
+        if (liveAudioPub) liveAudioPub.stop();
+        liveAudioPub = new USKingLiveAudio.Publisher(audioTok || '');
+        liveAudioPub.start(pageAudioStream, micStream);
+      }
     }
 
     try {
@@ -696,6 +881,13 @@ async function toggleLive() {
     } catch(e) { console.log('Recording not supported:', e); }
   } else {
     isLive = false;
+    stopCamera();
+    if (typeof USKingLiveKit !== 'undefined' && liveKitRoom) {
+      try {
+        USKingLiveKit.disconnect(liveKitRoom);
+      } catch (e) {}
+      liveKitRoom = null;
+    }
     stopFramePushToSite();
     if (liveAudioPub) {
       liveAudioPub.stop();
@@ -766,6 +958,7 @@ function updatePlatStatus() {
 }
 
 buildLayoutButtons();
+buildProgLayouts();
 updateUI();
 </script>
 </body>

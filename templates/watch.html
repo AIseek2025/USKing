@@ -14,12 +14,23 @@ let _liveBlobUrl = null;
 let _chatPollTimer = null;
 let _chatSinceId = 0;
 let _watchAudioViewer = null;
+let _watchLiveKitRoom = null;
+let _watchMedia = {};
 
 function _storageKeyWatchAudioPage() {
   return 'uskingWatchAudioPage_' + streamer;
 }
 function _storageKeyWatchAudioMic() {
   return 'uskingWatchAudioMic_' + streamer;
+}
+
+function _stopWatchLiveKit() {
+  if (typeof USKingLiveKit !== 'undefined' && _watchLiveKitRoom) {
+    try {
+      USKingLiveKit.disconnect(_watchLiveKitRoom);
+    } catch (e) {}
+    _watchLiveKitRoom = null;
+  }
 }
 
 function _stopWatchAudio() {
@@ -255,6 +266,70 @@ function _initWatchChatUI() {
   }
 }
 
+async function _startWatchWebRTC() {
+  _stopWatchLiveKit();
+  if (typeof USKingLiveKit === 'undefined') {
+    if (_watchMedia.fallback_enabled !== false && _watchMedia.playback_mode !== 'hls') {
+      _startLivePoll();
+      _startWatchAudio();
+    }
+    return;
+  }
+  const img = document.getElementById('livePollImg');
+  const v = document.getElementById('watchLiveRtc');
+  const wait = document.getElementById('liveWsWait');
+  if (img) img.style.display = 'none';
+  if (v) {
+    v.style.display = '';
+    v.muted = true;
+  }
+  try {
+    const r = await APP.api('GET', '/api/live/media/viewer-session/' + encodeURIComponent(streamer));
+    const sess = r.session || {};
+    const lk = sess.livekit;
+    if (!lk || !lk.token || !lk.ws_url) throw new Error('no livekit session');
+    _watchLiveKitRoom = await USKingLiveKit.viewerConnect({
+      url: lk.ws_url,
+      token: lk.token,
+      videoEl: v,
+      onFirstFrame: function () {
+        if (wait) wait.style.display = 'none';
+      },
+      onDisconnected: function () {
+        if (wait) wait.style.display = '';
+      },
+    });
+    if (v) {
+      v.addEventListener(
+        'click',
+        function () {
+          v.muted = false;
+          var box = document.querySelector('.watch-video-box');
+          if (box) {
+            var auds = box.querySelectorAll('audio');
+            for (var i = 0; i < auds.length; i++) {
+              try {
+                auds[i].play();
+              } catch (e) {}
+            }
+          }
+        },
+        { once: true }
+      );
+    }
+    return _watchLiveKitRoom;
+  } catch (e) {
+    console.warn('watch WebRTC:', e);
+    if (img) img.style.display = '';
+    if (v) v.style.display = 'none';
+    if (_watchMedia.fallback_enabled !== false && _watchMedia.playback_mode !== 'hls') {
+      _startLivePoll();
+      _startWatchAudio();
+    }
+  }
+  return null;
+}
+
 async function _sendWatchChat() {
   const inp = document.getElementById('watchChatInput');
   if (!inp || typeof APP === 'undefined' || !APP.token) return;
@@ -283,6 +358,17 @@ async function loadWatch() {
   const r = await APP.api('GET', `/api/live/user/${encodeURIComponent(streamer)}`);
   const u = r.user;
   const s = r.stream;
+  const media = r.media || {};
+  _watchMedia = media;
+  const mediaBackend = media.backend || 'legacy_jpeg';
+  const playbackMode = media.playback_mode || 'legacy_jpeg';
+  const lkReady = !!(media.livekit && media.livekit.ready);
+  const useWebRTC =
+    mediaBackend === 'livekit' && playbackMode === 'webrtc' && lkReady;
+  const useLegacyPreview =
+    !useWebRTC &&
+    (playbackMode === 'legacy_jpeg' ||
+      (media.fallback_enabled !== false && playbackMode !== 'hls'));
   const noServerFrame = !!(s && s.is_live && r.has_live_frame_buffer === false);
   const el = document.getElementById('watchContent');
   const av = u.avatar_url
@@ -297,6 +383,7 @@ async function loadWatch() {
       navigator.sendBeacon(`/api/live/leave/${encodeURIComponent(streamer)}`);
       _stopLivePoll();
       _stopWatchChat();
+      _stopWatchLiveKit();
       _stopWatchAudio();
     });
     el.innerHTML = `
@@ -320,10 +407,13 @@ async function loadWatch() {
               <label class="watch-audio-lab"><input type="checkbox" id="watchAudioMic" checked /> ${I18N.t('watch.audio_mic')}</label>
             </div>
             <img id="livePollImg" class="watch-video-img" alt="" />
+            <video id="watchLiveRtc" class="watch-video-img" playsinline autoplay muted style="display:none"></video>
             <div id="liveWsWait" class="watch-wait-overlay">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               <p style="font-size:14px;margin-top:10px;color:var(--text2);font-weight:600">${I18N.t('watch.connecting')}</p>
               <p style="font-size:12px;margin-top:8px;line-height:1.55;color:var(--text3)">${noServerFrame ? I18N.t('watch.no_server_frame') : I18N.t('watch.wait_capture')}</p>
+              <p style="font-size:11px;margin-top:8px;color:var(--text3)">${I18N.t('watch.media_backend')}：<strong>${_escapeHtml(mediaBackend)}</strong> · ${I18N.t('watch.playback_mode')}：<strong>${_escapeHtml(I18N.t('watch.mode_' + playbackMode) || playbackMode)}</strong></p>
+              ${playbackMode !== 'legacy_jpeg' ? `<p style="font-size:11px;margin-top:6px;color:var(--text3)">${I18N.t('watch.mode_note_fallback')}</p>` : ''}
               <p style="font-size:11px;margin-top:8px;color:var(--text3)">${typeof I18N !== 'undefined' && I18N.lang === 'en' ? 'Room' : '当前房间'}：<strong>@${_escapeHtml(u.username)}</strong></p>
             </div>
           </div>
@@ -350,11 +440,18 @@ async function loadWatch() {
     _initWatchFit();
     _initWatchChatUI();
     _startWatchChat();
-    _startLivePoll();
-    _startWatchAudio();
+    if (useWebRTC) {
+      const bar = document.getElementById('watchAudioBar');
+      if (bar) bar.style.display = 'none';
+      _startWatchWebRTC();
+    } else {
+      if (useLegacyPreview) _startLivePoll();
+      _startWatchAudio();
+    }
   } else {
     _stopLivePoll();
     _stopWatchChat();
+    _stopWatchLiveKit();
     _stopWatchAudio();
     el.innerHTML = `<div class="card watch-offline-card">
       <div style="display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:20px">
