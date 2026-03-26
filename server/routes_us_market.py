@@ -38,6 +38,70 @@ _log = logging.getLogger("meiguwang.us_market")
 
 router = APIRouter(prefix="/us", tags=["us-market"])
 
+# 美股大盘股代码展示顺序（按市值大致从大到小，定期人工更新；仅供投研侧栏导航，非实时行情）
+RESEARCH_LARGE_CAP_TICKERS_ORDER: list[str] = [
+    "NVDA",
+    "MSFT",
+    "AAPL",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "AVGO",
+    "TSLA",
+    "BRK.B",
+    "JPM",
+    "WMT",
+    "LLY",
+    "V",
+    "UNH",
+    "XOM",
+    "ORCL",
+    "MA",
+    "BAC",
+    "COST",
+    "ABBV",
+    "NFLX",
+    "CRM",
+    "AMD",
+    "KO",
+    "PEP",
+    "DIS",
+    "CSCO",
+    "ADBE",
+    "TMO",
+    "PM",
+    "MCD",
+    "WFC",
+    "MS",
+    "GS",
+    "RTX",
+    "HON",
+    "IBM",
+    "INTC",
+    "QCOM",
+    "TXN",
+    "AMAT",
+    "LOW",
+    "SBUX",
+    "SPGI",
+    "BLK",
+    "BKNG",
+    "CAT",
+    "DE",
+    "GE",
+    "AMGN",
+    "AXP",
+    "MDT",
+    "ISRG",
+    "GILD",
+    "SYK",
+    "TJX",
+    "ADP",
+    "C",
+    "SCHW",
+    "PLD",
+]
+
 _TICKER_RE = re.compile(r"^[A-Za-z][A-Za-z.\-]{0,14}$")
 _SERIES_RE = re.compile(r"^[A-Z0-9_+.\-]{1,64}$")
 
@@ -575,3 +639,9 @@ def us_research_status():
         "finnhub_configured": bool(FINNHUB_API_KEY),
         "alphavantage_configured": bool(ALPHA_VANTAGE_API_KEY),
     }
+
+
+@router.get("/research/large-cap-tickers")
+def us_research_large_cap_tickers():
+    """投研页侧栏：按市值大致排序的大盘股代码列表（静态顺序）。"""
+    return {"tickers": list(RESEARCH_LARGE_CAP_TICKERS_ORDER)}

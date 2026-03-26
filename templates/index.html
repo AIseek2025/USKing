@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}美股王 · 交易直播平台{% endblock %}
+{% block html_class %}spa-root{% endblock %}
+{% block body_class %}spa-root{% endblock %}
+{% block nav_before_search %}
+<button type="button" class="nav-spa-drawer-btn" id="spaDrawerBtn" aria-label="菜单" aria-expanded="false" onclick="spaDrawerToggle(event)">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+</button>
+{% endblock %}
 {% block head %}
 <style>
 .dy-slide{position:absolute;left:0;width:100%;height:calc(100% - 8px);display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--bg2);border-radius:16px}
@@ -180,9 +187,15 @@
 .us-about-card h4{margin:0 0 8px;font-size:14px;color:var(--white)}
 .us-about-card p{margin:0;font-size:13px;color:var(--text2);line-height:1.65}
 .us-fred-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:rgba(245,158,11,.18);color:var(--accent);vertical-align:middle}
+/* 触摸设备：精选 banner 内控制条不依赖 hover，避免「下拉/展开」不可见 */
+@media (hover:none){
+  .ft-thumb .ft-ctrl-bar{opacity:1;pointer-events:auto}
+  .ft-ctrl-row .ft-vol-wrap{width:50px}
+}
 </style>
 {% endblock %}
 {% block content %}
+<div class="spa-drawer-backdrop" id="spaDrawerBackdrop" onclick="spaDrawerClose()" aria-hidden="true"></div>
 <div class="app-layout" data-title-i18n="spa.doc_title">
   <!-- Left Sidebar -->
   <div class="app-sidebar" id="appSidebar">
@@ -351,11 +364,9 @@
             <button type="button" class="ft-tab us-tab" data-utab="quote" onclick="usShowTab('quote')" data-i18n="spa.us_tab_quote">个股行情</button>
             <button type="button" class="ft-tab us-tab" data-utab="sec" onclick="usShowTab('sec')" data-i18n="spa.us_tab_sec">SEC 公告</button>
             <button type="button" class="ft-tab us-tab" data-utab="news" onclick="usShowTab('news')" data-i18n="spa.us_tab_news">资讯</button>
-            <button type="button" class="ft-tab us-tab" data-utab="about" onclick="usShowTab('about')" data-i18n="spa.us_tab_about">开源与合规</button>
           </div>
 
           <div id="usPaneMacro" class="us-pane show">
-            <p class="us-subhint" style="margin-bottom:8px" data-i18n="spa.us_fred_hint">未配置 FRED_API_KEY 时将使用 FRED 官网公开 CSV（无需注册）。配置 Key 后走官方 API，元数据更完整。常用序列：UNRATE、CPIAUCSL、FEDFUNDS、DGS10。</p>
             <div class="us-macro-presets">
               <button type="button" class="us-preset" onclick="usSetSeries('UNRATE')">UNRATE</button>
               <button type="button" class="us-preset" onclick="usSetSeries('CPIAUCSL')">CPIAUCSL</button>
@@ -376,7 +387,6 @@
           </div>
 
           <div id="usPaneQuote" class="us-pane">
-            <p class="us-subhint" data-i18n="spa.us_quote_hint">基于 yfinance 拉取雅虎财经公开数据（非官方），适合快速查看报价与近期收盘价。</p>
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
               <input type="text" id="usTicker" class="form-input" value="AAPL" placeholder="AAPL" style="width:120px;height:36px;text-transform:uppercase">
               <button type="button" class="btn btn-primary btn-sm" onclick="usLoadQuote()" data-i18n="spa.us_load">加载</button>
@@ -385,7 +395,6 @@
           </div>
 
           <div id="usPaneSec" class="us-pane">
-            <p class="us-subhint" data-i18n="spa.us_sec_hint">使用 SEC data.sec.gov 官方公司提交 JSON，展示近期报表类型与链至 EDGAR 原文。请配置 SEC_HTTP_USER_AGENT 为可识别联系方式。</p>
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
               <input type="text" id="usSecTicker" class="form-input" value="AAPL" style="width:120px;height:36px;text-transform:uppercase">
               <button type="button" class="btn btn-primary btn-sm" onclick="usLoadSec()" data-i18n="spa.us_load">加载</button>
@@ -394,33 +403,8 @@
           </div>
 
           <div id="usPaneNews" class="us-pane">
-            <p class="us-subhint" data-i18n="spa.us_news_hint">未配置 NewsAPI 与自定义 RSS 时，将自动拉取 SEC 新闻稿官方 RSS。也可配置 NEWSAPI_KEY 或 NEWS_RSS_URLS。须遵守各来源 ToS。</p>
             <div style="margin-bottom:10px"><button type="button" class="btn btn-primary btn-sm" onclick="usLoadNews()" data-i18n="spa.us_load_news">刷新资讯</button></div>
-            <div id="usNewsMeta" style="font-size:12px;color:var(--text3);margin-bottom:8px"></div>
             <div id="usNewsOut"></div>
-          </div>
-
-          <div id="usPaneAbout" class="us-pane">
-            <div class="us-about-card">
-              <h4>Stock Analysis Engine</h4>
-              <p><a class="us-link" href="https://github.com/jasonstrimpel/stock-analysis-engine" target="_blank" rel="noopener">github.com/jasonstrimpel/stock-analysis-engine</a> — <span data-i18n="spa.us_about_sae">独立队列型数据后台，适合单独部署后与站内 API 对接；未整仓嵌入以避免 Redis/Celery 等与当前站点强耦合。</span></p>
-            </div>
-            <div class="us-about-card">
-              <h4>pyfredapi（FRED）</h4>
-              <p><a class="us-link" href="https://github.com/avelkoski/pyfredapi" target="_blank" rel="noopener">github.com/avelkoski/pyfredapi</a> — <span data-i18n="spa.us_about_fred">已在服务端用于宏观序列；需圣路易斯联储 API Key。</span></p>
-            </div>
-            <div class="us-about-card">
-              <h4>sec-edgar / SEC EDGAR</h4>
-              <p><a class="us-link" href="https://github.com/sec-edgar/sec-edgar" target="_blank" rel="noopener">github.com/sec-edgar/sec-edgar</a> — <span data-i18n="spa.us_about_sec">本站优先使用 SEC 官方 JSON 列公告；若需批量下载原始文件可再集成该库或 sec-edgar-downloader。</span></p>
-            </div>
-            <div class="us-about-card">
-              <h4>yfinance</h4>
-              <p><a class="us-link" href="https://github.com/ranaroussi/yfinance" target="_blank" rel="noopener">github.com/ranaroussi/yfinance</a> — <span data-i18n="spa.us_about_yf">已用于个股行情与历史收盘价序列。</span></p>
-            </div>
-            <div class="us-about-card">
-              <h4>news-please</h4>
-              <p><a class="us-link" href="https://github.com/fhamborg/news-please" target="_blank" rel="noopener">github.com/fhamborg/news-please</a> — <span data-i18n="spa.us_about_np">通用新闻抽取框架；未随站打包以免引入重型爬虫栈。可在后端接入合规 URL 列表做正文清洗与入库。</span></p>
-            </div>
           </div>
         </div>
       </div>
@@ -428,13 +412,17 @@
 
     <!-- Panel: 公司投研（免费层：Finnhub / Alpha Vantage + SEC 公告） -->
     <div class="app-panel" id="panelResearch">
-      <div class="app-panel-scroll" style="padding:20px 24px 32px">
-        <div style="max-width:920px;margin:0 auto">
+      <div class="app-panel-scroll research-panel-scroll">
+        <div class="research-layout">
+          <aside class="research-ticker-rail" aria-label="Mega-cap tickers">
+            <div class="research-ticker-rail-hd" data-i18n="spa.research_mcap_rail">市值序</div>
+            <div class="research-ticker-list" id="researchTickerList"></div>
+          </aside>
+          <div class="research-main">
           <h2 class="section-title" style="margin-top:0;display:flex;align-items:center;gap:10px">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
             <span data-i18n="spa.research_title">公司投研与资讯</span>
           </h2>
-          <p class="us-subhint" data-i18n="spa.research_sub">按股票代码聚合公开新闻与公司 SEC 披露。免费层使用 Finnhub、Alpha Vantage 官方免费 API（需自行注册 Key）；深度研报需后续自营内容或正版数据。</p>
           <p id="researchApiStatus" style="font-size:12px;color:var(--text3);margin-bottom:12px"></p>
           <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:20px">
             <input type="text" id="researchTicker" class="form-input" value="AAPL" data-i18n-ph="spa.research_ticker_ph" placeholder="股票代码，如 AAPL" style="width:140px;height:38px;text-transform:uppercase">
@@ -444,6 +432,7 @@
           <div id="researchNewsOut"><p class="us-subhint" data-i18n="spa.panel_loading">加载中...</p></div>
           <h3 style="font-size:15px;margin:24px 0 10px;color:var(--white)" data-i18n="spa.research_sec_h">SEC 监管披露（最近）</h3>
           <div id="researchSecOut"><p class="us-subhint" data-i18n="spa.panel_loading">加载中...</p></div>
+          </div>
         </div>
       </div>
     </div>
@@ -662,7 +651,6 @@ function refreshSpaAfterLang(){
     if(typeof APP!=='undefined' && window._viewProfileUsername && APP.user && window._viewProfileUsername!==APP.user.username && typeof viewUserProfile==='function') viewUserProfile(window._viewProfileUsername);
     else initMyProfile();
   }
-  if(ap==='usdata' && panelLoaded.usdata && typeof refreshUsDataMeta==='function') refreshUsDataMeta();
   if(ap==='research' && panelLoaded.research && typeof researchLoadAll==='function') researchLoadAll();
   if(typeof checkMemberStatus==='function') checkMemberStatus();
   const ftBtn=document.getElementById('ftLoadBtn');
@@ -698,7 +686,22 @@ function _cssBgCover(u){
   return `background-image:url('${s}');background-size:cover;background-position:center`;
 }
 
+function spaDrawerClose(){
+  document.body.classList.remove('spa-drawer-open');
+  const btn=document.getElementById('spaDrawerBtn');
+  if(btn) btn.setAttribute('aria-expanded','false');
+}
+function spaDrawerToggle(ev){
+  if(ev) ev.stopPropagation();
+  if(document.body.classList.contains('spa-drawer-open')){ spaDrawerClose(); return; }
+  document.body.classList.add('spa-drawer-open');
+  const btn=document.getElementById('spaDrawerBtn');
+  if(btn) btn.setAttribute('aria-expanded','true');
+}
+document.addEventListener('keydown',function(e){ if(e.key==='Escape') spaDrawerClose(); });
+
 function switchPanel(name, el){
+  spaDrawerClose();
   if(currentPanel === name) return;
   currentPanel = name;
   location.hash = name;
@@ -2673,7 +2676,7 @@ function usShowTab(t){
     b.classList.toggle('active', b.getAttribute('data-utab')===t);
   });
   document.querySelectorAll('#panelUsdata .us-pane').forEach(p=>p.classList.remove('show'));
-  const map={macro:'usPaneMacro',quote:'usPaneQuote',sec:'usPaneSec',news:'usPaneNews',about:'usPaneAbout'};
+  const map={macro:'usPaneMacro',quote:'usPaneQuote',sec:'usPaneSec',news:'usPaneNews'};
   const pid=map[t];
   if(pid){ const el=document.getElementById(pid); if(el) el.classList.add('show'); }
   if(t==='macro' && !_usLoaded.macro){ _usLoaded.macro=true; usLoadFred(); }
@@ -2684,21 +2687,7 @@ function usSetSeries(s){
   if(inp) inp.value=s;
   usLoadFred();
 }
-function refreshUsDataMeta(){
-  fetch('/api/us/meta').then(r=>r.json()).then(m=>{
-    const el=document.getElementById('usNewsMeta');
-    if(!el||typeof I18N==='undefined') return;
-    const n=m.rss_effective_count!=null?m.rss_effective_count:m.rss_feed_count;
-    el.textContent=I18N.fmt('spa.us_meta',{
-      fred:m.fred_api_key_configured?I18N.t('spa.us_fred_mode_api'):I18N.t('spa.us_fred_mode_csv'),
-      news:m.newsapi_configured?I18N.t('spa.us_on'):I18N.t('spa.us_off'),
-      n:String(n),
-      suffix:m.rss_builtin_active?I18N.t('spa.us_meta_builtin_suffix'):''
-    });
-  }).catch(()=>{});
-}
 function initUsDataPanel(){
-  refreshUsDataMeta();
   _usLoaded.macro=true;
   usLoadFred();
 }
@@ -2711,9 +2700,6 @@ async function usLoadFred(){
   try{
     const r=await APP.api('GET','/api/us/fred/series?series_id='+encodeURIComponent(sid)+'&limit='+lim);
     const rows=(r.observations||[]).map(o=>'<tr><td>'+usEsc(o.date)+'</td><td>'+usEsc(o.value)+'</td></tr>').join('');
-    const note=(r.fred_via==='public_csv')
-      ?'<p style="font-size:12px;color:var(--text3);margin:8px 0 0;line-height:1.55" data-i18n="spa.us_fred_csv_note"></p>'
-      :(r.note?'<p style="font-size:12px;color:var(--text3);margin:8px 0 0;line-height:1.55">'+usEsc(r.note)+'</p>':'');
     const t=(r.title||'').trim();
     const sidUp=(r.series_id||'').trim().toUpperCase();
     const titleSame=t.toUpperCase()===sidUp;
@@ -2728,7 +2714,7 @@ async function usLoadFred(){
     metaParts.push('<a class="us-link" href="'+usEsc(r.fred_url)+'" target="_blank" rel="noopener">'+usEsc(_t('spa.us_fred_series_link'))+'</a>');
     const metaLine=metaParts.join(' · ');
     out.innerHTML='<p style="font-size:14px;color:var(--text);margin:12px 0 6px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">'+titleLine+'</p>'+
-      '<p style="font-size:12px;color:var(--text3);margin:0 0 4px">'+metaLine+'</p>'+note+
+      '<p style="font-size:12px;color:var(--text3);margin:0 0 4px">'+metaLine+'</p>'+
       '<table class="us-data-table"><thead><tr><th data-i18n="spa.us_col_date">日期</th><th data-i18n="spa.us_col_value">数值</th></tr></thead><tbody>'+rows+'</tbody></table>';
     if(window.I18N) I18N.apply();
   }catch(e){ out.innerHTML='<p class="us-err">'+usEsc(e.message||_t('spa.us_fail'))+'</p>'; }
@@ -2789,8 +2775,48 @@ function researchRefreshStatus(){
     });
   }).catch(()=>{});
 }
-function initResearchPanel(){
+const _RESEARCH_TICKERS_FALLBACK=['NVDA','MSFT','AAPL','AMZN','GOOGL','META','AVGO','TSLA','BRK.B','JPM','WMT','LLY','V','UNH','XOM','ORCL','MA','BAC','COST','ABBV','NFLX','CRM','AMD','KO','PEP','DIS','CSCO','ADBE','TMO','PM','MCD','WFC','MS','GS','RTX','HON','IBM','INTC','QCOM','TXN','AMAT','LOW','SBUX','SPGI','BLK','BKNG','CAT','DE','GE','AMGN','AXP','MDT','ISRG','GILD','SYK','TJX','ADP','C','SCHW','PLD'];
+function _researchAttrEsc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+function researchHighlightRail(tic){
+  const u=String(tic||'').trim().toUpperCase();
+  document.querySelectorAll('#researchTickerList .research-ticker-btn').forEach(b=>{
+    const x=(b.getAttribute('data-t')||'').toUpperCase();
+    b.classList.toggle('active',x===u);
+  });
+}
+function researchSelectTicker(raw){
+  const t=String(raw||'').trim();
+  if(!t) return;
+  const inp=document.getElementById('researchTicker');
+  if(inp) inp.value=t;
+  researchHighlightRail(t);
+  researchLoadAll();
+}
+async function initResearchRail(){
+  const listEl=document.getElementById('researchTickerList');
+  if(!listEl) return;
+  let tickers=[];
+  try{
+    const r=await APP.api('GET','/api/us/research/large-cap-tickers');
+    tickers=Array.isArray(r?.tickers)?r.tickers:[];
+  }catch(e){ tickers=[]; }
+  if(!tickers.length) tickers=_RESEARCH_TICKERS_FALLBACK.slice();
+  listEl.innerHTML=tickers.map(t=>{
+    const sym=String(t).trim();
+    return '<button type="button" class="research-ticker-btn" data-t="'+_researchAttrEsc(sym)+'">'+usEsc(sym)+'</button>';
+  }).join('');
+  listEl.querySelectorAll('.research-ticker-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>researchSelectTicker(btn.getAttribute('data-t')));
+  });
+  const cur=(document.getElementById('researchTicker')||{}).value?.trim()||'AAPL';
+  researchHighlightRail(cur);
+  if(window.I18N) I18N.apply();
+}
+async function initResearchPanel(){
   researchRefreshStatus();
+  await initResearchRail();
   researchLoadAll();
 }
 async function researchLoadAll(){
@@ -2808,7 +2834,6 @@ async function researchLoadAll(){
     if((r.errors||[]).length){
       html+='<p class="us-err" style="margin-bottom:10px">'+r.errors.map(usEsc).join('<br>')+'</p>';
     }
-    html+='<p style="font-size:12px;color:var(--text3);margin:0 0 12px">'+usEsc(_t('spa.research_disclaimer'))+'</p>';
     const items=r.items||[];
     if(!items.length){
       html+='<p class="us-subhint">'+usEsc(_t('spa.research_news_empty'))+'</p>';
@@ -2835,6 +2860,7 @@ async function researchLoadAll(){
   }catch(e){
     if(secEl) secEl.innerHTML='<p class="us-err">'+usEsc(e.message||_t('spa.us_fail'))+'</p>';
   }
+  researchHighlightRail(t);
 }
 
 /* ===== INIT ===== */

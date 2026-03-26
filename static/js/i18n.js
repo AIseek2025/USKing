@@ -507,6 +507,7 @@ const I18N = {
       en: 'Article extraction framework; not bundled. Pipe compliant URLs through it on the server.',
     },
     'spa.research_title': { zh: '公司投研与资讯', en: 'Company research & news' },
+    'spa.research_mcap_rail': { zh: '市值序', en: 'Mcap ↓' },
     'spa.research_sub': {
       zh: '按股票代码聚合公开新闻与 SEC 披露。免费层使用 Finnhub、Alpha Vantage 官方 API（需免费注册 Key）。非卖方深度研报。',
       en: 'By ticker: public headlines plus SEC filings. Free tier uses Finnhub and Alpha Vantage (free API keys). Not sell-side research.',
