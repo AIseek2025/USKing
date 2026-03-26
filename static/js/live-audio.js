@@ -1,12 +1,15 @@
 /**
- * 站内直播音频：主播 WebSocket 上传双声道 PCM（0=画面/系统音 1=麦克风），观众可独立开关两路播放。
- * 依赖：采集端 getDisplayMedia({audio:true}) 与/或 getUserMedia({audio:true})。
+ * 站内直播音频：主播 WebSocket 上传双声道 PCM（0=画面系统音 1=麦克风），观众可独立开关两路。
+ * 优先使用 AudioWorklet；不支持时回退 ScriptProcessorNode。
  */
 (function (global) {
   'use strict';
   var CH_PAGE = 0;
   var CH_MIC = 1;
   var MAX_QUEUES = 80;
+
+  var CAPTURE_WORKLET_URL = '/static/js/audio-worklets/live-audio-capture-processor.js';
+  var PLAYBACK_WORKLET_URL = '/static/js/audio-worklets/live-audio-playback-processor.js';
 
   function wsBase() {
     var p = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -42,6 +45,7 @@
     this.ws = null;
     this.ctx = null;
     this.procNodes = [];
+    this.workletNodes = [];
   }
 
   LiveAudioPublisher.prototype.start = function (pageStream, micStream) {
@@ -66,7 +70,19 @@
       } catch (e) {}
     };
 
-    function wireStream(stream, chId) {
+    function sendPcm(chId, f32) {
+      var pcm = floatToInt16(f32);
+      var buf = new Uint8Array(1 + pcm.byteLength);
+      buf[0] = chId;
+      buf.set(new Uint8Array(pcm.buffer), 1);
+      if (self.ws && self.ws.readyState === WebSocket.OPEN) {
+        try {
+          self.ws.send(buf.buffer);
+        } catch (err) {}
+      }
+    }
+
+    function wireStreamScript(stream, chId) {
       if (!stream || !stream.getAudioTracks().length) return;
       var src = self.ctx.createMediaStreamSource(stream);
       var inch = Math.min(2, Math.max(1, src.channelCount || 1));
@@ -78,24 +94,57 @@
       gain.connect(self.ctx.destination);
       proc.onaudioprocess = function (e) {
         var mono = downmixMono(e.inputBuffer);
-        var pcm = floatToInt16(mono);
-        var buf = new Uint8Array(1 + pcm.byteLength);
-        buf[0] = chId;
-        buf.set(new Uint8Array(pcm.buffer), 1);
-        if (self.ws && self.ws.readyState === WebSocket.OPEN) {
-          try {
-            self.ws.send(buf.buffer);
-          } catch (err) {}
-        }
+        sendPcm(chId, mono);
       };
       self.procNodes.push({ proc: proc, src: src, gain: gain });
     }
 
-    wireStream(pageStream, CH_PAGE);
-    wireStream(micStream, CH_MIC);
+    function wireStreamWorklet(stream, chId) {
+      if (!stream || !stream.getAudioTracks().length) return;
+      var src = self.ctx.createMediaStreamSource(stream);
+      var node = new AudioWorkletNode(self.ctx, 'live-audio-capture');
+      var gain = self.ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(node);
+      node.connect(gain);
+      gain.connect(self.ctx.destination);
+      node.port.onmessage = function (ev) {
+        var ab = ev.data;
+        if (!ab) return;
+        sendPcm(chId, new Float32Array(ab));
+      };
+      self.workletNodes.push({ node: node, src: src, gain: gain });
+    }
+
+    function startScriptFallback() {
+      wireStreamScript(pageStream, CH_PAGE);
+      wireStreamScript(micStream, CH_MIC);
+    }
+
+    if (this.ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
+      this.ctx.audioWorklet
+        .addModule(CAPTURE_WORKLET_URL)
+        .then(function () {
+          wireStreamWorklet(pageStream, CH_PAGE);
+          wireStreamWorklet(micStream, CH_MIC);
+        })
+        .catch(function () {
+          startScriptFallback();
+        });
+    } else {
+      startScriptFallback();
+    }
   };
 
   LiveAudioPublisher.prototype.stop = function () {
+    this.workletNodes.forEach(function (n) {
+      try {
+        n.node.disconnect();
+        n.src.disconnect();
+        n.gain.disconnect();
+      } catch (e) {}
+    });
+    this.workletNodes = [];
     this.procNodes.forEach(function (n) {
       try {
         n.proc.disconnect();
@@ -122,6 +171,7 @@
     this.ws = null;
     this.ctx = null;
     this.proc = null;
+    this.playbackNode = null;
     this.gainPage = 1;
     this.gainMic = 1;
     this.qPage = [];
@@ -154,6 +204,11 @@
   LiveAudioViewer.prototype.setGains = function (playPage, playMic) {
     this.gainPage = playPage ? 1 : 0;
     this.gainMic = playMic ? 1 : 0;
+    if (this.playbackNode && this.playbackNode.port) {
+      try {
+        this.playbackNode.port.postMessage({ type: 'gains', page: playPage, mic: playMic });
+      } catch (e) {}
+    }
   };
 
   LiveAudioViewer.prototype.start = function () {
@@ -161,8 +216,57 @@
     var self = this;
     var un = this.username;
     if (!un) return;
-    var url = wsBase() + '/api/ws/live/audio/watch/' + encodeURIComponent(un);
-    this.ws = new WebSocket(url);
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    this._silentOsc = null;
+    var pending = [];
+
+    this._pushFallbackQueue = function (ch, copy) {
+      if (ch === CH_PAGE) {
+        self.qPage.push(copy);
+        self._trim(self.qPage);
+      } else if (ch === CH_MIC) {
+        self.qMic.push(copy);
+        self._trim(self.qMic);
+      }
+    };
+
+    function postToWorklet(ch, copy) {
+      var ab = copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength);
+      self.playbackNode.port.postMessage({ type: 'push', ch: ch, buffer: ab }, [ab]);
+    }
+
+    function routeChunk(ch, copy) {
+      if (self.playbackNode && self.playbackNode.port) {
+        try {
+          postToWorklet(ch, copy);
+        } catch (e) {
+          self._pushFallbackQueue(ch, copy);
+        }
+      } else if (self.proc) {
+        self._pushFallbackQueue(ch, copy);
+      } else {
+        pending.push({ ch: ch, copy: copy });
+      }
+    }
+
+    function flushPending() {
+      var i;
+      for (i = 0; i < pending.length; i++) {
+        var item = pending[i];
+        if (self.playbackNode && self.playbackNode.port) {
+          try {
+            postToWorklet(item.ch, item.copy);
+          } catch (e) {
+            self._pushFallbackQueue(item.ch, item.copy);
+          }
+        } else if (self.proc) {
+          self._pushFallbackQueue(item.ch, item.copy);
+        }
+      }
+      pending = [];
+    }
+
+    this.ws = new WebSocket(wsBase() + '/api/ws/live/audio/watch/' + encodeURIComponent(un));
     this.ws.binaryType = 'arraybuffer';
     this.ws.onmessage = function (ev) {
       if (typeof ev.data === 'string') {
@@ -179,52 +283,70 @@
       var pcm = new Int16Array(u8.buffer, u8.byteOffset + 1, samples);
       var copy = new Int16Array(pcm.length);
       copy.set(pcm);
-      if (ch === CH_PAGE) {
-        self.qPage.push(copy);
-        self._trim(self.qPage);
-      } else if (ch === CH_MIC) {
-        self.qMic.push(copy);
-        self._trim(self.qMic);
-      }
+      routeChunk(ch, copy);
     };
-    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    this._silentOsc = null;
-    var proc;
-    try {
-      proc = this.ctx.createScriptProcessor(2048, 0, 1);
-    } catch (e1) {
-      proc = null;
-    }
-    if (!proc) {
+
+    function startScriptPlayback() {
+      var proc;
       try {
-        proc = this.ctx.createScriptProcessor(2048, 1, 1);
-      } catch (e2) {
-        return;
+        proc = self.ctx.createScriptProcessor(2048, 0, 1);
+      } catch (e1) {
+        proc = null;
       }
-    }
-    this.proc = proc;
-    if (proc.numberOfInputs > 0) {
-      var sg = this.ctx.createGain();
-      sg.gain.value = 0;
-      var osc = this.ctx.createOscillator();
-      osc.frequency.value = 20;
-      osc.connect(sg);
-      sg.connect(proc);
-      osc.start();
-      this._silentOsc = osc;
-    }
-    proc.onaudioprocess = function (e) {
-      var out = e.outputBuffer.getChannelData(0);
-      var n = out.length;
-      for (var i = 0; i < n; i++) {
-        var sum =
-          self._pullSample(0) * self.gainPage + self._pullSample(1) * self.gainMic;
-        if (sum > 1) sum = 1;
-        if (sum < -1) sum = -1;
-        out[i] = sum;
+      if (!proc) {
+        try {
+          proc = self.ctx.createScriptProcessor(2048, 1, 1);
+        } catch (e2) {
+          return;
+        }
       }
-    };
-    proc.connect(this.ctx.destination);
+      self.proc = proc;
+      if (proc.numberOfInputs > 0) {
+        var sg = self.ctx.createGain();
+        sg.gain.value = 0;
+        var osc = self.ctx.createOscillator();
+        osc.frequency.value = 20;
+        osc.connect(sg);
+        sg.connect(proc);
+        osc.start();
+        self._silentOsc = osc;
+      }
+      proc.onaudioprocess = function (e) {
+        var out = e.outputBuffer.getChannelData(0);
+        var n = out.length;
+        var j;
+        for (j = 0; j < n; j++) {
+          var sum =
+            self._pullSample(0) * self.gainPage + self._pullSample(1) * self.gainMic;
+          if (sum > 1) sum = 1;
+          if (sum < -1) sum = -1;
+          out[j] = sum;
+        }
+      };
+      proc.connect(self.ctx.destination);
+      flushPending();
+    }
+
+    if (this.ctx.audioWorklet && typeof AudioWorkletNode !== 'undefined') {
+      this.ctx.audioWorklet
+        .addModule(PLAYBACK_WORKLET_URL)
+        .then(function () {
+          var node = new AudioWorkletNode(self.ctx, 'live-audio-playback');
+          node.port.postMessage({
+            type: 'gains',
+            page: self.gainPage === 1,
+            mic: self.gainMic === 1,
+          });
+          node.connect(self.ctx.destination);
+          self.playbackNode = node;
+          flushPending();
+        })
+        .catch(function () {
+          startScriptPlayback();
+        });
+    } else {
+      startScriptPlayback();
+    }
   };
 
   LiveAudioViewer.prototype.stop = function () {
@@ -240,6 +362,12 @@
         this.ws.close();
       } catch (e) {}
       this.ws = null;
+    }
+    if (this.playbackNode) {
+      try {
+        this.playbackNode.disconnect();
+      } catch (e) {}
+      this.playbackNode = null;
     }
     if (this.proc) {
       try {

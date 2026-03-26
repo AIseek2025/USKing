@@ -160,7 +160,16 @@
     return copy;
   }
 
+  function _shouldInstallRtcDebugShim() {
+    try {
+      if (global.__USKING_DEV_MODE__ === true) return true;
+      if (global.localStorage && global.localStorage.getItem('USKING_DEBUG_RTC') === '1') return true;
+    } catch (e) {}
+    return false;
+  }
+
   function _installRtcDebugShim() {
+    if (!_shouldInstallRtcDebugShim()) return;
     if (global.__USKING_RTC_SHIM_INSTALLED) return;
     var NativePC = global.RTCPeerConnection || global.webkitRTCPeerConnection;
     if (!NativePC) return;
@@ -249,37 +258,20 @@
     }
   }
 
-  function _buildMixedAudio(opts, Track) {
-    var pageTrack = opts.audioPageTrack;
-    var micTrack = opts.audioMicTrack;
-    var singleTrack = opts.audioTrack;
-    var liveTracks = [];
-    if (pageTrack && pageTrack.readyState === 'live') {
-      liveTracks.push({ track: pageTrack, kind: 'page' });
+  function _pageAudioSource(Track) {
+    if (Track && Track.Source && Track.Source.ScreenShareAudio !== undefined) {
+      return Track.Source.ScreenShareAudio;
     }
-    if (micTrack && micTrack.readyState === 'live') {
-      liveTracks.push({ track: micTrack, kind: 'mic' });
-    }
-    if (!liveTracks.length && singleTrack && singleTrack.readyState === 'live') {
-      return Promise.resolve({
-        track: singleTrack,
-        name: 'audio',
-        source: Track && Track.Source ? Track.Source.Microphone : undefined,
-        cleanup: function () {},
-      });
-    }
-    if (!liveTracks.length) {
-      return Promise.resolve(null);
-    }
+    return Track && Track.Source ? Track.Source.ScreenShare : undefined;
+  }
+
+  /**
+   * 麦克风轨：高通 + 轻限幅后再发布，减少底噪与过载（与旧混音方案一致的处理强度）。
+   */
+  function _processMicTrackForPublish(micTrack, Track) {
     var Ctx = global.AudioContext || global.webkitAudioContext;
-    if (!Ctx) {
-      _log('host', 'AudioContext unavailable, fallback to raw audio track');
-      return Promise.resolve({
-        track: liveTracks[0].track,
-        name: liveTracks.length > 1 ? 'audio' : liveTracks[0].kind,
-        source: Track && Track.Source ? Track.Source.Microphone : undefined,
-        cleanup: function () {},
-      });
+    if (!Ctx || !micTrack || micTrack.readyState !== 'live') {
+      return Promise.resolve(null);
     }
     var ctx = new Ctx();
     var dest = ctx.createMediaStreamDestination();
@@ -290,72 +282,137 @@
     compressor.attack.setValueAtTime(0.003, ctx.currentTime);
     compressor.release.setValueAtTime(0.15, ctx.currentTime);
     compressor.connect(dest);
-    var nodes = [];
-    var multi = liveTracks.length > 1;
-    liveTracks.forEach(function (item) {
-      var src = ctx.createMediaStreamSource(new MediaStream([item.track]));
-      var gain = ctx.createGain();
-      gain.gain.value = multi ? 0.7 : 0.9;
-      var lastNode = src;
-      if (item.kind === 'mic') {
-        var hp = ctx.createBiquadFilter();
-        hp.type = 'highpass';
-        hp.frequency.value = 80;
-        hp.Q.value = 0.7;
-        lastNode.connect(hp);
-        lastNode = hp;
-      }
-      lastNode.connect(gain);
-      gain.connect(compressor);
-      nodes.push({ src: src, gain: gain });
-    });
-    var mixedTrack = dest.stream.getAudioTracks()[0];
-    if (!mixedTrack) {
-      nodes.forEach(function (item) {
-        try {
-          item.src.disconnect();
-          item.gain.disconnect();
-        } catch (e) {}
-      });
-      try { compressor.disconnect(); } catch (e) {}
+    var src = ctx.createMediaStreamSource(new MediaStream([micTrack]));
+    var hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 80;
+    hp.Q.value = 0.7;
+    var gain = ctx.createGain();
+    gain.gain.value = 0.9;
+    src.connect(hp);
+    hp.connect(gain);
+    gain.connect(compressor);
+    var outTrack = dest.stream.getAudioTracks()[0];
+    if (!outTrack) {
+      try {
+        src.disconnect();
+        hp.disconnect();
+        gain.disconnect();
+        compressor.disconnect();
+      } catch (e) {}
       ctx.close().catch(function () {});
-      return Promise.resolve({
-        track: liveTracks[0].track,
-        name: liveTracks.length > 1 ? 'audio' : liveTracks[0].kind,
-        source: Track && Track.Source ? Track.Source.Microphone : undefined,
-        cleanup: function () {},
-      });
+      return Promise.resolve({ track: micTrack, cleanup: function () {} });
     }
     return Promise.resolve({
-      track: mixedTrack,
-      name: liveTracks.length > 1 ? 'audio' : liveTracks[0].kind,
-      source:
-        liveTracks.length > 1
-          ? Track && Track.Source
-            ? Track.Source.Microphone
-            : undefined
-          : liveTracks[0].kind === 'page'
-            ? Track && Track.Source && Track.Source.ScreenShareAudio !== undefined
-              ? Track.Source.ScreenShareAudio
-              : Track && Track.Source
-                ? Track.Source.ScreenShare
-                : undefined
-            : Track && Track.Source
-              ? Track.Source.Microphone
-              : undefined,
+      track: outTrack,
       cleanup: function () {
         try {
-          mixedTrack.stop();
+          outTrack.stop();
         } catch (e) {}
-        nodes.forEach(function (item) {
-          try {
-            item.src.disconnect();
-            item.gain.disconnect();
-          } catch (e) {}
-        });
-        try { compressor.disconnect(); } catch (e) {}
+        try {
+          src.disconnect();
+          hp.disconnect();
+          gain.disconnect();
+          compressor.disconnect();
+        } catch (e) {}
         ctx.close().catch(function () {});
       },
+    });
+  }
+
+  /**
+   * 分轨发布：page / mic 两条独立 LocalAudioTrack，观众端可按 trackName 独立静音。
+   * 仅单路或 AudioContext 不可用时回退为单轨（名 audio 或 page/mic）。
+   */
+  function _collectHostAudioItems(opts, Track) {
+    var pageTrack = opts.audioPageTrack;
+    var micTrack = opts.audioMicTrack;
+    var singleTrack = opts.audioTrack;
+    var hasPage = pageTrack && pageTrack.readyState === 'live';
+    var hasMic = micTrack && micTrack.readyState === 'live';
+    var cleanups = [];
+
+    function pushCleanup(fn) {
+      cleanups.push(fn);
+    }
+
+    if (!hasPage && !hasMic && singleTrack && singleTrack.readyState === 'live') {
+      return Promise.resolve({
+        items: [
+          {
+            track: singleTrack,
+            name: 'audio',
+            source: Track && Track.Source ? Track.Source.Microphone : undefined,
+          },
+        ],
+        cleanupAll: function () {},
+      });
+    }
+    if (!hasPage && !hasMic) {
+      return Promise.resolve({ items: [], cleanupAll: function () {} });
+    }
+
+    if (hasPage && hasMic) {
+      return _processMicTrackForPublish(micTrack, Track).then(function (micProc) {
+        var items = [
+          {
+            track: pageTrack,
+            name: 'page',
+            source: _pageAudioSource(Track),
+          },
+        ];
+        var micT = micProc && micProc.track && micProc.track.readyState === 'live' ? micProc.track : micTrack;
+        if (micProc && micProc.cleanup) pushCleanup(micProc.cleanup);
+        items.push({
+          track: micT,
+          name: 'mic',
+          source: Track && Track.Source ? Track.Source.Microphone : undefined,
+        });
+        return {
+          items: items,
+          cleanupAll: function () {
+            cleanups.forEach(function (fn) {
+              try {
+                fn();
+              } catch (e) {}
+            });
+          },
+        };
+      });
+    }
+
+    if (hasPage && !hasMic) {
+      return Promise.resolve({
+        items: [
+          {
+            track: pageTrack,
+            name: 'page',
+            source: _pageAudioSource(Track),
+          },
+        ],
+        cleanupAll: function () {},
+      });
+    }
+
+    return _processMicTrackForPublish(micTrack, Track).then(function (micProc) {
+      var micT = micProc && micProc.track && micProc.track.readyState === 'live' ? micProc.track : micTrack;
+      if (micProc && micProc.cleanup) pushCleanup(micProc.cleanup);
+      return {
+        items: [
+          {
+            track: micT,
+            name: 'mic',
+            source: Track && Track.Source ? Track.Source.Microphone : undefined,
+          },
+        ],
+        cleanupAll: function () {
+          cleanups.forEach(function (fn) {
+            try {
+              fn();
+            } catch (e) {}
+          });
+        },
+      };
     });
   }
 
@@ -499,14 +556,21 @@
         }
         return chain
           .then(function () {
-            return _buildMixedAudio(opts, Track).then(function (mixed) {
-              if (!mixed || !mixed.track || mixed.track.readyState !== 'live') {
+            return _collectHostAudioItems(opts, Track).then(function (bundle) {
+              if (!bundle || !bundle.items || !bundle.items.length) {
                 _log('host', 'no live audio track available to publish');
                 return;
               }
-              room.__uskingCleanup = mixed.cleanup;
-              _log('host', 'publishing mixed audio track', mixed.name);
-              return publishAudio(mixed.track, mixed.name, mixed.source);
+              room.__uskingCleanup = bundle.cleanupAll;
+              var seq = Promise.resolve();
+              bundle.items.forEach(function (item) {
+                seq = seq.then(function () {
+                  if (!item.track || item.track.readyState !== 'live') return;
+                  _log('host', 'publishing audio track', item.name);
+                  return publishAudio(item.track, item.name, item.source);
+                });
+              });
+              return seq;
             });
           })
           .then(function () {

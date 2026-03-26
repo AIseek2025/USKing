@@ -49,6 +49,23 @@ _audio_sr: Dict[str, int] = {}
 _AUDIO_CH_PAGE = 0
 _AUDIO_CH_MIC = 1
 _MAX_AUDIO_PACKET = 256 * 1024
+# 单主播上行 PCM 粗限流（防异常客户端拖垮事件循环）；约 1.2MB/s，远高于正常 48kHz mono
+_MAX_AUDIO_BYTES_PER_SEC = 1_200_000
+_audio_pub_rate: Dict[str, tuple] = {}
+
+
+def _check_audio_publish_rate(un: str, nbytes: int) -> bool:
+    now = time.monotonic()
+    entry = _audio_pub_rate.get(un)
+    if not entry or now - entry[0] >= 1.0:
+        _audio_pub_rate[un] = (now, nbytes)
+        return nbytes <= _MAX_AUDIO_BYTES_PER_SEC
+    st, acc = entry
+    acc += nbytes
+    if acc > _MAX_AUDIO_BYTES_PER_SEC:
+        return False
+    _audio_pub_rate[un] = (st, acc)
+    return True
 
 
 async def disconnect_live_audio_room(username: str) -> None:
@@ -60,6 +77,7 @@ async def disconnect_live_audio_room(username: str) -> None:
         viewers = list(_audio_viewers.pop(un, []))
         pub = _audio_publishers.pop(un, None)
     _audio_sr.pop(un, None)
+    _audio_pub_rate.pop(un, None)
     for vw in viewers:
         try:
             await vw.close(code=1000)
@@ -425,6 +443,8 @@ async def ws_audio_publish(websocket: WebSocket):
                 ch = data_b[0]
                 if ch not in (_AUDIO_CH_PAGE, _AUDIO_CH_MIC):
                     continue
+                if not _check_audio_publish_rate(un, len(data_b)):
+                    continue
                 await _fanout_audio_bytes(un, data_b)
                 continue
             data_t = msg.get("text")
@@ -447,6 +467,7 @@ async def ws_audio_publish(websocket: WebSocket):
         async with _state_lock:
             if _audio_publishers.get(un) is websocket:
                 del _audio_publishers[un]
+        _audio_pub_rate.pop(un, None)
 
 
 @router.websocket("/ws/live/audio/watch/{username}")

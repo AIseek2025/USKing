@@ -98,6 +98,7 @@ app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), na
 app.mount("/app", StaticFiles(directory=os.path.join(BASE_DIR, "app"), html=True), name="app_static")
 
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
+templates.env.globals["dev_mode"] = DEV_MODE
 
 app.include_router(api_router)
 
