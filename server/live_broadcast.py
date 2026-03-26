@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections import defaultdict
-from typing import DefaultDict, Dict, List, Optional
+from typing import DefaultDict, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response, StreamingResponse
@@ -31,10 +32,14 @@ _publishers: Dict[str, WebSocket] = {}
 _viewers: DefaultDict[str, List[WebSocket]] = defaultdict(list)
 _last_jpeg: Dict[str, bytes] = {}
 _frame_ver: Dict[str, int] = defaultdict(int)
-_post_check_counter: DefaultDict[str, int] = defaultdict(int)
+
+_live_users: Dict[str, float] = {}
+_LIVE_CHECK_INTERVAL = 30.0
 
 MJPEG_BOUNDARY = b"frame"
 MJPEG_SEP = b"--frame\r\n"
+
+_WS_SEND_TIMEOUT = 3.0
 
 
 def _jpeg_ok(data: bytes) -> bool:
@@ -50,22 +55,48 @@ def username_has_frame(username: str) -> bool:
     return bool(data and _jpeg_ok(data))
 
 
+def mark_user_live(user_id: str) -> None:
+    """start_stream 时由 api 调用，写入内存缓存，后续 push-frame 可跳过 DB。"""
+    _live_users[user_id] = time.monotonic()
+
+
+def clear_user_frame(username: str, user_id: str | None = None) -> None:
+    """stop_stream 时由 api 调用，清除该用户的所有内存帧与缓存。"""
+    un = (username or "").strip()
+    if un:
+        _last_jpeg.pop(un, None)
+        _frame_ver.pop(un, None)
+    if user_id:
+        _live_users.pop(user_id, None)
+
+
+def _user_is_cached_live(user_id: str) -> bool:
+    ts = _live_users.get(user_id)
+    if ts is None:
+        return False
+    return (time.monotonic() - ts) < _LIVE_CHECK_INTERVAL
+
+
 async def _broadcast_jpeg(un: str, data: bytes) -> None:
     _last_jpeg[un] = data
     _frame_ver[un] += 1
-    dead: List[WebSocket] = []
-    for vw in list(_viewers.get(un, [])):
+    viewers = list(_viewers.get(un, []))
+    if not viewers:
+        return
+    dead: Set[WebSocket] = set()
+
+    async def _safe_send(ws: WebSocket) -> None:
         try:
-            await vw.send_bytes(data)
+            await asyncio.wait_for(ws.send_bytes(data), timeout=_WS_SEND_TIMEOUT)
         except Exception:
-            dead.append(vw)
+            dead.add(ws)
+
+    await asyncio.gather(*(_safe_send(vw) for vw in viewers))
     if dead:
         async with _state_lock:
             lst = _viewers.get(un)
             if lst:
-                for w in dead:
-                    if w in lst:
-                        lst.remove(w)
+                _viewers[un] = [w for w in lst if w not in dead]
 
 
 async def _auth_publisher(websocket: WebSocket) -> Optional[User]:
@@ -91,35 +122,20 @@ async def live_push_frame(request: Request, user: User = Depends(require_user)):
     if not _jpeg_ok(body):
         raise HTTPException(status_code=400, detail="无效 JPEG")
 
-    db: Session = SessionLocal()
-    try:
-        stream = (
-            db.query(LiveStream)
-            .filter(LiveStream.user_id == user.id, LiveStream.is_live == True)
-            .first()
-        )
-    finally:
-        db.close()
-    if not stream:
-        raise HTTPException(status_code=409, detail="未在直播中，请先开始直播")
-
-    n = _post_check_counter[user.id] + 1
-    _post_check_counter[user.id] = n
-    if n % 45 == 0:
-        db_chk: Session = SessionLocal()
+    if not _user_is_cached_live(user.id):
+        db: Session = SessionLocal()
         try:
-            still = (
-                db_chk.query(LiveStream)
-                .filter(
-                    LiveStream.user_id == user.id,
-                    LiveStream.is_live == True,
-                )
+            stream = (
+                db.query(LiveStream)
+                .filter(LiveStream.user_id == user.id, LiveStream.is_live == True)
                 .first()
             )
         finally:
-            db_chk.close()
-        if not still:
-            raise HTTPException(status_code=409, detail="直播已结束")
+            db.close()
+        if not stream:
+            _live_users.pop(user.id, None)
+            raise HTTPException(status_code=409, detail="未在直播中，请先开始直播")
+        _live_users[user.id] = time.monotonic()
 
     un = user.username
     await _broadcast_jpeg(un, body)
@@ -217,7 +233,7 @@ async def ws_live_publish(websocket: WebSocket):
         _publishers[un] = websocket
 
     _log.info("live publish connect user=%s", un)
-    frame_i = 0
+    mark_user_live(user.id)
     try:
         while True:
             raw = await websocket.receive()
@@ -228,8 +244,7 @@ async def ws_live_publish(websocket: WebSocket):
                 continue
             if not _jpeg_ok(data):
                 continue
-            frame_i += 1
-            if frame_i % 45 == 0:
+            if not _user_is_cached_live(user.id):
                 db_chk: Session = SessionLocal()
                 try:
                     still = (
@@ -245,6 +260,7 @@ async def ws_live_publish(websocket: WebSocket):
                 if not still:
                     await websocket.close(code=1008)
                     break
+                _live_users[user.id] = time.monotonic()
             await _broadcast_jpeg(un, data)
     except WebSocketDisconnect:
         pass

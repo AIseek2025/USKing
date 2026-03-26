@@ -145,14 +145,16 @@ async function _pollWatchChat() {
     const j = await r.json();
     if (!j.stream_live) return;
     const msgs = j.messages || [];
+    let added = false;
     for (const m of msgs) {
       if (m.id > _chatSinceId) _chatSinceId = m.id;
       if (!list.querySelector('.watch-chat-msg[data-id="' + Number(m.id) + '"]')) {
         _clearWatchChatEmpty();
         list.insertAdjacentHTML('beforeend', _renderChatMessage(m));
+        added = true;
       }
     }
-    list.scrollTop = list.scrollHeight;
+    if (added) list.scrollTop = list.scrollHeight;
   } catch (e) {}
 }
 

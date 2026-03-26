@@ -585,6 +585,7 @@ function _revokeLiveThumbsIn(root){
     if(s.startsWith('blob:')){try{URL.revokeObjectURL(s)}catch(e){}}
   });
 }
+var _thumbBackoff={};
 function _liveThumbPollTick(){
   const imgs=document.querySelectorAll('img.live-last-frame');
   const active=Array.from(imgs).filter((img)=>img.offsetParent!==null);
@@ -598,8 +599,19 @@ function _liveThumbPollTick(){
     let un='';
     try{un=decodeURIComponent(raw)}catch(e){return}
     if(!un)return;
+    var bo=_thumbBackoff[un];
+    if(bo&&bo.next>Date.now())return;
     fetch(location.origin+'/api/live/last-frame/'+encodeURIComponent(un)+'?t='+Date.now(),{credentials:'omit',cache:'no-store'})
-      .then((r)=>{if(r.status===404)return null;if(!r.ok)throw 0;return r.blob()})
+      .then((r)=>{
+        if(r.status===404){
+          var cur=(_thumbBackoff[un]&&_thumbBackoff[un].delay)||2000;
+          _thumbBackoff[un]={delay:Math.min(cur*2,15000),next:Date.now()+cur};
+          return null;
+        }
+        if(!r.ok)throw 0;
+        _thumbBackoff[un]=null;
+        return r.blob();
+      })
       .then((blob)=>{
         if(!blob||!blob.size)return;
         const url=URL.createObjectURL(blob);
@@ -613,7 +625,7 @@ function _liveThumbPollTick(){
 }
 function ensureLiveThumbsPolling(){
   _liveThumbPollTick();
-  if(!_liveThumbPollTimer)_liveThumbPollTimer=setInterval(_liveThumbPollTick,400);
+  if(!_liveThumbPollTimer)_liveThumbPollTimer=setInterval(_liveThumbPollTick,2000);
 }
 function _tf(k,v){ return (typeof I18N!=='undefined'&&I18N.fmt)?I18N.fmt(k,v):k; }
 /** 与 DOM 中实际激活的 panel 同步（避免 currentPanel 与界面不一致导致切换语言后不刷新） */
@@ -1097,8 +1109,8 @@ function dashStartFramePushToSite(){
         .then((res)=>{if(res.status===401)alert(_t('dash.push_login_expired'))})
         .catch(()=>{})
         .finally(()=>{_dFramePushInFlight=false});
-    },'image/jpeg',0.72);
-  },120);
+    },'image/jpeg',0.55);
+  },150);
 }
 function dashStopFramePushToSite(){
   if(_dFramePushTimer){clearInterval(_dFramePushTimer);_dFramePushTimer=null}

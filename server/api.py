@@ -2,7 +2,7 @@ import json, logging, math, random, re, string, uuid, os
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from sqlalchemy import or_, and_, func, cast, String
@@ -39,7 +39,7 @@ from .config import (
     ALLOWED_MEDIA_EXT,
 )
 from .routes_us_market import router as _us_market_router
-from .live_broadcast import router as _live_ws_router, username_has_frame
+from .live_broadcast import router as _live_ws_router, username_has_frame, mark_user_live, clear_user_frame
 
 router = APIRouter(prefix="/api")
 router.include_router(_us_market_router)
@@ -753,11 +753,13 @@ def start_stream(req: StreamUpdate, user: User = Depends(require_user), db: Sess
     if stream:
         stream.title = req.title or stream.title
         db.commit()
+        mark_user_live(user.id)
         return {"stream": _stream_dict(stream)}
     stream = LiveStream(user_id=user.id, title=req.title or f"{user.display_name}的直播", is_live=True, started_at=utcnow())
     db.add(stream)
     db.commit()
     db.refresh(stream)
+    mark_user_live(user.id)
     return {"stream": _stream_dict(stream)}
 
 
@@ -768,6 +770,7 @@ def stop_stream(user: User = Depends(require_user), db: Session = Depends(get_db
         stream.is_live = False
         stream.ended_at = utcnow()
         db.commit()
+    clear_user_frame(user.username, user.id)
     return {"ok": True}
 
 
@@ -776,18 +779,25 @@ def live_heartbeat(user: User = Depends(require_user), db: Session = Depends(get
     stream = db.query(LiveStream).filter(LiveStream.user_id == user.id, LiveStream.is_live == True).first()
     if stream:
         stream.viewer_count = max(0, stream.viewer_count)
+        db.commit()
+        mark_user_live(user.id)
     return {"ok": True}
 
 
 @router.get("/live/active")
 def get_active_streams(db: Session = Depends(get_db)):
-    streams = (db.query(LiveStream).filter(LiveStream.is_live == True)
-               .order_by(LiveStream.viewer_count.desc()).limit(50).all())
+    streams = (
+        db.query(LiveStream)
+        .options(joinedload(LiveStream.user))
+        .filter(LiveStream.is_live == True)
+        .order_by(LiveStream.viewer_count.desc())
+        .limit(50)
+        .all()
+    )
     result = []
     for s in streams:
-        user = db.query(User).filter(User.id == s.user_id).first()
         d = _stream_dict(s)
-        d["user"] = _user_dict(user) if user else None
+        d["user"] = _user_dict(s.user) if s.user else None
         result.append(d)
     return {"streams": result}
 
@@ -810,10 +820,10 @@ def join_stream(username: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(404)
-    stream = db.query(LiveStream).filter(LiveStream.user_id == user.id, LiveStream.is_live == True).first()
-    if stream:
-        stream.viewer_count = (stream.viewer_count or 0) + 1
-        db.commit()
+    db.query(LiveStream).filter(
+        LiveStream.user_id == user.id, LiveStream.is_live == True
+    ).update({LiveStream.viewer_count: LiveStream.viewer_count + 1}, synchronize_session=False)
+    db.commit()
     return {"ok": True}
 
 
@@ -822,10 +832,10 @@ def leave_stream(username: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(404)
-    stream = db.query(LiveStream).filter(LiveStream.user_id == user.id, LiveStream.is_live == True).first()
-    if stream and stream.viewer_count > 0:
-        stream.viewer_count -= 1
-        db.commit()
+    db.query(LiveStream).filter(
+        LiveStream.user_id == user.id, LiveStream.is_live == True, LiveStream.viewer_count > 0
+    ).update({LiveStream.viewer_count: LiveStream.viewer_count - 1}, synchronize_session=False)
+    db.commit()
     return {"ok": True}
 
 
@@ -1335,15 +1345,18 @@ def search_all(q: str = "", db: Session = Depends(get_db)):
                 "album_title": v.album.title if v.album else "",
                 "view_count": v.view_count or 0} for v in vids]
     # Live streams
-    streams_q = (db.query(LiveStream).filter(
-        LiveStream.is_live == True, LiveStream.title.ilike(kw)
-    ).limit(10).all())
+    streams_q = (
+        db.query(LiveStream)
+        .options(joinedload(LiveStream.user))
+        .filter(LiveStream.is_live == True, LiveStream.title.ilike(kw))
+        .limit(10)
+        .all()
+    )
     stream_results = []
     for s in streams_q:
-        u = db.query(User).filter(User.id == s.user_id).first()
         stream_results.append({
             "id": s.id, "title": s.title, "viewer_count": s.viewer_count,
-            "user": _user_dict(u) if u else None})
+            "user": _user_dict(s.user) if s.user else None})
     # Posts
     posts_q = (db.query(Post).filter(
         Post.hidden == False, Post.content.ilike(kw)
