@@ -283,13 +283,30 @@
     }
     var ctx = new Ctx();
     var dest = ctx.createMediaStreamDestination();
+    var compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-24, ctx.currentTime);
+    compressor.knee.setValueAtTime(12, ctx.currentTime);
+    compressor.ratio.setValueAtTime(8, ctx.currentTime);
+    compressor.attack.setValueAtTime(0.003, ctx.currentTime);
+    compressor.release.setValueAtTime(0.15, ctx.currentTime);
+    compressor.connect(dest);
     var nodes = [];
+    var multi = liveTracks.length > 1;
     liveTracks.forEach(function (item) {
       var src = ctx.createMediaStreamSource(new MediaStream([item.track]));
       var gain = ctx.createGain();
-      gain.gain.value = 1;
-      src.connect(gain);
-      gain.connect(dest);
+      gain.gain.value = multi ? 0.7 : 0.9;
+      var lastNode = src;
+      if (item.kind === 'mic') {
+        var hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 80;
+        hp.Q.value = 0.7;
+        lastNode.connect(hp);
+        lastNode = hp;
+      }
+      lastNode.connect(gain);
+      gain.connect(compressor);
       nodes.push({ src: src, gain: gain });
     });
     var mixedTrack = dest.stream.getAudioTracks()[0];
@@ -300,6 +317,7 @@
           item.gain.disconnect();
         } catch (e) {}
       });
+      try { compressor.disconnect(); } catch (e) {}
       ctx.close().catch(function () {});
       return Promise.resolve({
         track: liveTracks[0].track,
@@ -335,6 +353,7 @@
             item.gain.disconnect();
           } catch (e) {}
         });
+        try { compressor.disconnect(); } catch (e) {}
         ctx.close().catch(function () {});
       },
     });

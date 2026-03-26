@@ -1289,7 +1289,7 @@ async function dashEnsureRealtimeTransport(opts){
     const cv=document.getElementById('dashCanvas');
     if(!cv||!cv.width||(!_dSources.length&&!_dCamStream))return false;
     if((opts.ensureMic!==false)&&document.getElementById('dashCapMicAudio')&&document.getElementById('dashCapMicAudio').checked&&(!_dMicStream||!_dMicStream.getAudioTracks||!_dMicStream.getAudioTracks().length)){
-      try{_dMicStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});}catch(e){console.warn('mic',e);}
+      try{_dMicStream=await navigator.mediaDevices.getUserMedia({audio:{noiseSuppression:true,echoCancellation:true,autoGainControl:true},video:false});}catch(e){console.warn('mic',e);}
     }
     var pageAud=null,pageAudTrack=null;
     for(var si=0;si<_dSources.length;si++){
@@ -1347,7 +1347,7 @@ async function startStream(){
     _dLive=true;
     _dMicStream=null;
     if(document.getElementById('dashCapMicAudio')&&document.getElementById('dashCapMicAudio').checked){
-      try{_dMicStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});}catch(e){console.warn('mic',e);}
+      try{_dMicStream=await navigator.mediaDevices.getUserMedia({audio:{noiseSuppression:true,echoCancellation:true,autoGainControl:true},video:false});}catch(e){console.warn('mic',e);}
     }
     var pageAud=null,pageAudTrack=null;
     for(var si=0;si<_dSources.length;si++){
