@@ -711,7 +711,29 @@ html.spa-root,body.spa-root{height:100%;max-height:100%;overflow:hidden;overscro
   overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:var(--bg4) transparent;
   -webkit-overflow-scrolling:touch;
 }
-.research-ticker-rail-hd{font-size:10px;font-weight:700;color:var(--text3);text-align:center;margin:0 0 10px;line-height:1.25;letter-spacing:.02em}
+.research-ticker-rail-hd{font-size:10px;font-weight:700;color:var(--text3);text-align:center;margin:0 0 8px;line-height:1.25;letter-spacing:.02em}
+.research-ticker-search-wrap{position:relative;margin-bottom:10px;width:100%}
+.research-ticker-search-input{
+  width:100%;box-sizing:border-box;padding:6px 6px;font-size:10px;font-family:var(--font-mono);
+  border:1px solid var(--bg4);border-radius:8px;background:var(--bg2);color:var(--text);outline:none;
+}
+.research-ticker-search-input::placeholder{color:var(--text3)}
+.research-ticker-search-input:focus{border-color:rgba(255,215,0,.45)}
+.research-ticker-search-results{
+  position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:50;max-height:min(42vh,220px);overflow-y:auto;
+  background:var(--bg2);border:1px solid var(--bg3);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.45);
+  scrollbar-width:thin;
+}
+.research-search-hint{padding:8px 6px;font-size:10px;color:var(--text3);line-height:1.4}
+.research-search-err{color:#f87171}
+.research-search-item{
+  display:flex;flex-direction:column;align-items:stretch;gap:2px;width:100%;padding:7px 6px;margin:0;border:none;border-bottom:1px solid var(--bg3);
+  background:transparent;color:var(--text);cursor:pointer;text-align:left;transition:background .1s;
+}
+.research-search-item:last-child{border-bottom:none}
+.research-search-item:hover{background:rgba(255,215,0,.08)}
+.research-search-sym{font-size:11px;font-weight:700;font-family:var(--font-mono);color:var(--accent)}
+.research-search-name{font-size:9px;color:var(--text2);line-height:1.3;word-break:break-word}
 .research-ticker-list{display:flex;flex-direction:column;gap:5px}
 .research-ticker-btn{
   display:block;width:100%;padding:7px 2px;margin:0;border:1px solid var(--bg4);border-radius:8px;background:var(--bg3);

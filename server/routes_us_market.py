@@ -106,6 +106,7 @@ _TICKER_RE = re.compile(r"^[A-Za-z][A-Za-z.\-]{0,14}$")
 _SERIES_RE = re.compile(r"^[A-Z0-9_+.\-]{1,64}$")
 
 _sec_ticker_map: Optional[dict[str, str]] = None
+_sec_company_rows: Optional[list[tuple[str, str]]] = None
 _sec_ticker_loaded_ts: float = 0.0
 _SEC_TICKER_TTL = 86400 * 1  # 24h
 
@@ -119,11 +120,11 @@ def _sec_headers() -> dict[str, str]:
 
 
 def _load_sec_ticker_to_cik() -> dict[str, str]:
-    global _sec_ticker_map, _sec_ticker_loaded_ts
+    global _sec_ticker_map, _sec_company_rows, _sec_ticker_loaded_ts
     import time
 
     now = time.time()
-    if _sec_ticker_map and (now - _sec_ticker_loaded_ts) < _SEC_TICKER_TTL:
+    if _sec_ticker_map and _sec_company_rows and (now - _sec_ticker_loaded_ts) < _SEC_TICKER_TTL:
         return _sec_ticker_map
 
     url = "https://www.sec.gov/files/company_tickers.json"
@@ -133,18 +134,71 @@ def _load_sec_ticker_to_cik() -> dict[str, str]:
         raw = r.json()
 
     m: dict[str, str] = {}
+    rows: list[tuple[str, str]] = []
+    seen_t: set[str] = set()
     for v in raw.values():
         if not isinstance(v, dict):
             continue
         t = v.get("ticker")
         cik = v.get("cik_str")
+        title = str(v.get("title") or "").strip()
         if t and cik is not None:
-            m[str(t).upper()] = str(int(cik)).zfill(10)
+            tu = str(t).upper()
+            m[tu] = str(int(cik)).zfill(10)
+            if tu not in seen_t:
+                seen_t.add(tu)
+                rows.append((tu, title))
 
     _sec_ticker_map = m
+    _sec_company_rows = rows
     _sec_ticker_loaded_ts = now
-    _log.info("SEC company_tickers 已缓存: %d 条", len(m))
+    _log.info("SEC company_tickers 已缓存: %d 条, 投研搜索索引 %d 条", len(m), len(rows))
     return m
+
+
+def _ticker_match_rank(ticker: str, title_upper: str, q: str) -> int:
+    """匹配优先级，数值越小越好；999 表示不匹配。"""
+    if not q:
+        return 999
+    t = ticker.upper()
+    if t == q:
+        return 0
+    if t.startswith(q):
+        return 10
+    if len(q) >= 2 and q in t:
+        return 35
+    if title_upper.startswith(q):
+        return 25
+    if len(q) >= 2 and q in title_upper:
+        return 45
+    return 999
+
+
+def _research_ticker_search_sync(q: str, limit: int) -> list[dict[str, str]]:
+    """基于 SEC company_tickers 的公司名与代码子串搜索（首字母/多字母）。"""
+    qq = (q or "").strip().upper()
+    if not qq or len(qq) > 32:
+        return []
+    lim = min(max(limit, 1), 80)
+    _load_sec_ticker_to_cik()
+    rows = _sec_company_rows or []
+    scored: list[tuple[int, str, str]] = []
+    for ticker, title in rows:
+        ti = (title or "").upper()
+        rank = _ticker_match_rank(ticker, ti, qq)
+        if rank < 900:
+            scored.append((rank, ticker, title))
+    scored.sort(key=lambda x: (x[0], x[1]))
+    out: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for _r, ticker, title in scored:
+        if ticker in seen:
+            continue
+        seen.add(ticker)
+        out.append({"ticker": ticker, "title": title})
+        if len(out) >= lim:
+            break
+    return out
 
 
 def _cik_int_from_padded(cik: str) -> int:
@@ -645,3 +699,16 @@ def us_research_status():
 def us_research_large_cap_tickers():
     """投研页侧栏：按市值大致排序的大盘股代码列表（静态顺序）。"""
     return {"tickers": list(RESEARCH_LARGE_CAP_TICKERS_ORDER)}
+
+
+@router.get("/research/ticker-search")
+async def us_research_ticker_search(
+    q: str = Query("", max_length=40),
+    limit: int = Query(30, ge=1, le=80),
+):
+    """全美上市主体代码/公司名搜索（数据来自 SEC company_tickers，首次请求可能较慢）。"""
+    try:
+        return {"query": (q or "").strip(), "items": await asyncio.to_thread(_research_ticker_search_sync, q, limit)}
+    except Exception as e:
+        _log.exception("ticker-search 失败")
+        raise HTTPException(502, f"代码搜索暂不可用: {e}") from e

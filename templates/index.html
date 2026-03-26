@@ -416,6 +416,10 @@
         <div class="research-layout">
           <aside class="research-ticker-rail" aria-label="Mega-cap tickers">
             <div class="research-ticker-rail-hd" data-i18n="spa.research_mcap_rail">市值序</div>
+            <div class="research-ticker-search-wrap">
+              <input type="text" id="researchTickerSearch" class="research-ticker-search-input" data-i18n-ph="spa.research_ticker_search_ph" placeholder="搜索代码/公司" autocomplete="off" maxlength="40" oninput="researchTickerSearchDebounced()" onfocus="researchTickerSearchOnFocus()">
+              <div id="researchTickerSearchResults" class="research-ticker-search-results" style="display:none" role="listbox" aria-label="Ticker search"></div>
+            </div>
             <div class="research-ticker-list" id="researchTickerList"></div>
           </aside>
           <div class="research-main">
@@ -2794,6 +2798,61 @@ function researchSelectTicker(raw){
   researchHighlightRail(t);
   researchLoadAll();
 }
+let _researchSearchTimer=null;
+function researchTickerSearchDebounced(){
+  clearTimeout(_researchSearchTimer);
+  _researchSearchTimer=setTimeout(()=>researchTickerSearchRun(), 300);
+}
+function researchTickerSearchOnFocus(){
+  const inp=document.getElementById('researchTickerSearch');
+  const box=document.getElementById('researchTickerSearchResults');
+  if(!inp||!box||!inp.value.trim()) return;
+  if(box.innerHTML.trim()) box.style.display='block';
+}
+function researchTickerSearchHideDelayed(){
+  setTimeout(()=>{
+    const box=document.getElementById('researchTickerSearchResults');
+    const inp=document.getElementById('researchTickerSearch');
+    if(!box||!inp) return;
+    if(document.activeElement===inp) return;
+    box.style.display='none';
+  }, 200);
+}
+async function researchTickerSearchRun(){
+  const inp=document.getElementById('researchTickerSearch');
+  const box=document.getElementById('researchTickerSearchResults');
+  if(!inp||!box) return;
+  const q=inp.value.trim();
+  if(!q){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='block';
+  box.innerHTML='<div class="research-search-hint">'+usEsc(_t('spa.panel_loading'))+'</div>';
+  try{
+    const r=await APP.api('GET','/api/us/research/ticker-search?q='+encodeURIComponent(q)+'&limit=40');
+    const items=r.items||[];
+    if(!items.length){
+      box.innerHTML='<div class="research-search-hint">'+usEsc(_t('spa.research_search_empty'))+'</div>';
+      return;
+    }
+    box.innerHTML=items.map(it=>{
+      const sym=String(it.ticker||'').trim();
+      const nm=String(it.title||'').trim();
+      const nmShort=nm.length>40?nm.slice(0,40)+'…':nm;
+      return '<button type="button" class="research-search-item" role="option" data-t="'+_researchAttrEsc(sym)+'"><span class="research-search-sym">'+usEsc(sym)+'</span><span class="research-search-name">'+usEsc(nmShort)+'</span></button>';
+    }).join('');
+    box.querySelectorAll('.research-search-item').forEach(btn=>{
+      btn.addEventListener('mousedown',e=>{ e.preventDefault(); });
+      btn.addEventListener('click',()=>{
+        const sym=btn.getAttribute('data-t');
+        researchSelectTicker(sym);
+        box.style.display='none';
+        box.innerHTML='';
+        if(inp) inp.value='';
+      });
+    });
+  }catch(e){
+    box.innerHTML='<div class="research-search-hint research-search-err">'+usEsc(e.message||_t('spa.us_fail'))+'</div>';
+  }
+}
 async function initResearchRail(){
   const listEl=document.getElementById('researchTickerList');
   if(!listEl) return;
@@ -2812,6 +2871,10 @@ async function initResearchRail(){
   });
   const cur=(document.getElementById('researchTicker')||{}).value?.trim()||'AAPL';
   researchHighlightRail(cur);
+  const rs=document.getElementById('researchTickerSearch');
+  if(rs){
+    rs.addEventListener('blur',researchTickerSearchHideDelayed);
+  }
   if(window.I18N) I18N.apply();
 }
 async function initResearchPanel(){
