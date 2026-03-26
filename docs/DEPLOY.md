@@ -48,6 +48,7 @@ LIVEKIT_API_SECRET=your_api_secret
 生产环境 WebRTC 跨网、手机、企业网通常 **必须 TURN**。推荐部署 **独立 coturn**，与 LiveKit 内置 TURN 解耦；USKing 通过 `POST /api/live/media/host-session` 与 `GET /api/live/media/viewer-session/{user}` 返回标准字段 **`ice_servers`**（`urls` + `username` + `credential`），前端 `livekit-usking.js` 将其传入 `Room.connect(..., { rtcConfig })`。
 
 配置步骤与端口清单见仓库 [`infra/turn/README.md`](../infra/turn/README.md)。环境变量见根目录 `.env.example` 中 `TURN_*`。
+当前实战验证后的最终交付清单见 [`docs/LIVE_PRODUCTION_FINAL_CHECKLIST.md`](./LIVE_PRODUCTION_FINAL_CHECKLIST.md)。
 
 生产上已验证的一组稳定组合是：
 
