@@ -320,6 +320,10 @@ let framePushTimer = null;
 let framePushInFlight = false;
 let streamCanvas = null;
 let streamCtx = null;
+let previewFramePushTimer = null;
+let previewFramePushInFlight = false;
+let previewCanvas = null;
+let previewCtx = null;
 let liveAudioPub = null;
 let micStream = null;
 let liveKitRoom = null;
@@ -703,6 +707,15 @@ function ensureStreamCanvas() {
   }
 }
 
+function ensurePreviewCanvas() {
+  if (!previewCanvas) {
+    previewCanvas = document.createElement('canvas');
+    previewCanvas.width = 480;
+    previewCanvas.height = 270;
+    previewCtx = previewCanvas.getContext('2d');
+  }
+}
+
 /** 主站登录只存 localStorage token；与 APP.api 一致须带 Bearer，不能仅靠 Cookie */
 function pushFrameAuthHeaders() {
   const h = { 'Content-Type': 'image/jpeg' };
@@ -711,6 +724,10 @@ function pushFrameAuthHeaders() {
     if (t) h['Authorization'] = 'Bearer ' + t;
   } catch (e) {}
   return h;
+}
+
+function hasRequestedPageAudioWithoutTrack(pageAudTrack) {
+  return !!document.getElementById('capPageAudio')?.checked && !pageAudTrack;
 }
 
 function startFramePushToSite() {
@@ -755,6 +772,51 @@ function stopFramePushToSite() {
     framePushTimer = null;
   }
   framePushInFlight = false;
+}
+
+function startPreviewFramePushToSite() {
+  ensurePreviewCanvas();
+  if (previewFramePushTimer) clearInterval(previewFramePushTimer);
+  previewFramePushInFlight = false;
+
+  const tick = () => {
+    if (!isLive || previewFramePushInFlight) return;
+    if (sources.length === 0 && !camStream) return;
+    try {
+      previewCtx.drawImage(canvas, 0, 0, 480, 270);
+    } catch (e) {
+      return;
+    }
+    previewCanvas.toBlob((blob) => {
+      if (!blob || !isLive) return;
+      previewFramePushInFlight = true;
+      blob
+        .arrayBuffer()
+        .then((buf) =>
+          fetch(location.origin + '/api/live/push-frame', {
+            method: 'POST',
+            credentials: 'include',
+            headers: pushFrameAuthHeaders(),
+            body: buf,
+          })
+        )
+        .catch(() => {})
+        .finally(() => {
+          previewFramePushInFlight = false;
+        });
+    }, 'image/jpeg', 0.42);
+  };
+
+  tick();
+  previewFramePushTimer = setInterval(tick, 2500);
+}
+
+function stopPreviewFramePushToSite() {
+  if (previewFramePushTimer) {
+    clearInterval(previewFramePushTimer);
+    previewFramePushTimer = null;
+  }
+  previewFramePushInFlight = false;
 }
 
 async function toggleLive() {
@@ -815,6 +877,9 @@ async function toggleLive() {
       micStream && micStream.getAudioTracks && micStream.getAudioTracks().length
         ? micStream.getAudioTracks()[0]
         : null;
+    if (hasRequestedPageAudioWithoutTrack(pageAudTrack)) {
+      alert('你已勾选采集画面/系统声音，但当前采集源没有返回音轨。请删除该采集源后重新添加，并在浏览器共享弹窗中勾选共享音频。');
+    }
 
     let usedLiveKit = false;
     try {
@@ -870,6 +935,8 @@ async function toggleLive() {
         liveAudioPub = new USKingLiveAudio.Publisher(audioTok || '');
         liveAudioPub.start(pageAudioStream, micStream);
       }
+    } else {
+      startPreviewFramePushToSite();
     }
 
     try {
@@ -889,6 +956,7 @@ async function toggleLive() {
       liveKitRoom = null;
     }
     stopFramePushToSite();
+    stopPreviewFramePushToSite();
     if (liveAudioPub) {
       liveAudioPub.stop();
       liveAudioPub = null;

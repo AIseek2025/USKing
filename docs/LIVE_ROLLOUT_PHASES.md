@@ -19,6 +19,7 @@
 - 环境变量：`LIVE_MEDIA_BACKEND=livekit`、`LIVE_PUBLISH_MODE=webrtc`、`LIVE_PLAYBACK_MODE=webrtc` 且配置 `LIVEKIT_*` 时，主播端用 `canvas.captureStream` + 麦克风/页音轨发布；观众端用 `livekit-client`（`static/js/livekit-usking.js`）订阅。
 - 未配置 LiveKit 或失败时：`LIVE_FALLBACK_ENABLED` 仍为 true 则回退 JPEG 轮询 +  legacy 音频 WS。
 - 匿名观众 `viewer-session` 使用唯一 identity，避免 SFU 内互踢。
+- Phase 2 补强约束：观看页必须显式处理浏览器音频解锁；直播列表继续消费低频 JPEG 预览，不把列表缩略图改成重型 WebRTC。
 
 ## Phase 3：RTMP + HLS
 - egress 输出多平台 RTMP

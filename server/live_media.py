@@ -86,17 +86,25 @@ def _livekit_token(
 
 
 def media_backend_summary() -> dict[str, Any]:
+    livekit_ok = livekit_ready()
+    preferred_realtime = (
+        "webrtc"
+        if LIVE_MEDIA_BACKEND == "livekit" and livekit_ok and LIVE_PLAYBACK_MODE == "webrtc"
+        else LIVE_PLAYBACK_MODE
+    )
     return {
         "backend": LIVE_MEDIA_BACKEND,
         "publish_mode": LIVE_PUBLISH_MODE,
         "playback_mode": LIVE_PLAYBACK_MODE,
+        "preferred_realtime_mode": preferred_realtime,
         "fallback_enabled": LIVE_FALLBACK_ENABLED,
         "fallback_mode": LIVE_FALLBACK_MODE,
+        "preview_mode": "jpeg_snapshot",
         "signaling_url": LIVE_SIGNALING_URL,
         "turn_urls": LIVE_TURN_URLS,
         "livekit": {
             "enabled": LIVE_MEDIA_BACKEND == "livekit",
-            "ready": livekit_ready(),
+            "ready": livekit_ok,
             "ws_url": LIVEKIT_WS_URL,
         },
     }
@@ -112,6 +120,13 @@ def stream_media_descriptor(username: str, stream: Optional[LiveStream]) -> dict
         "is_live": live,
         "hls_manifest_url": hls,
         "legacy": legacy_transport_for_username(username),
+        "preview": {
+            "mode": "jpeg_snapshot",
+            "source": "push-frame",
+            "list_cards": True,
+            "fallback_watch": True,
+            "storage": "process_memory",
+        },
         "tracks": {
             "video": ["screen", "camera"],
             "audio": ["page", "mic"],
@@ -135,7 +150,9 @@ def host_session_payload(user: User, stream: LiveStream) -> dict[str, Any]:
                 {"id": "mic", "source": "getUserMedia", "required": False},
             ],
             "output": {
-                "primary_program": "canvas.captureStream + mixed audio",
+                "primary_program_video": "canvas.captureStream",
+                "primary_program_audio": ["page track", "mic track"],
+                "preview_jpeg": "low-frequency push-frame for live list and fallback preview",
                 "layout_presets": [
                     "screenOnly",
                     "screenPlusPipCam",

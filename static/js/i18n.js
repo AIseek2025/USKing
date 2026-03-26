@@ -157,6 +157,10 @@ const I18N = {
       zh: '登录已失效，请刷新页面重新登录后再开播。',
       en: 'Session expired. Refresh, sign in again, then go live.',
     },
+    'dash.page_audio_missing': {
+      zh: '你已勾选采集画面/系统声音，但当前采集源没有返回音轨。请删除该采集源后重新添加，并在浏览器共享弹窗中勾选共享音频。',
+      en: 'Screen/system audio was requested, but the current capture source has no audio track. Remove and re-add the source, then enable audio in the browser share dialog.',
+    },
 
     // === Watch ===
     'watch.loading': { zh: '暂无实时播放画面', en: 'No live video feed yet' },
@@ -197,6 +201,22 @@ const I18N = {
     'watch.audio_hint_bar': {
       zh: '可单独开关两路声音；需先点击开启（浏览器要求）。',
       en: 'Toggle each channel; tap Enable first (browser policy).',
+    },
+    'watch.audio_hint_webrtc_wait': {
+      zh: '已进入实时房间，正在等待主播音轨接入。',
+      en: 'Connected to the realtime room, waiting for host audio tracks.',
+    },
+    'watch.audio_hint_webrtc_locked': {
+      zh: '实时音频已连接；如无声音，请点击开启。',
+      en: 'Realtime audio is connected. Tap enable if you still hear nothing.',
+    },
+    'watch.audio_hint_webrtc_live': {
+      zh: '实时音频已连接，可分别开关画面音和麦克风。',
+      en: 'Realtime audio is connected. You can toggle screen audio and mic separately.',
+    },
+    'watch.audio_hint_webrtc_blocked': {
+      zh: '浏览器阻止了自动播放，请点击开启声音。',
+      en: 'Autoplay was blocked by the browser. Tap enable audio.',
     },
     'watch.media_backend': { zh: '媒体后端', en: 'Media backend' },
     'watch.playback_mode': { zh: '播放模式', en: 'Playback mode' },

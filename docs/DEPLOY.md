@@ -24,6 +24,25 @@ cp .env.example .env
 # 编辑 .env 后启动
 ```
 
+站内实时观看的标准组合建议固定为：
+
+```bash
+LIVE_MEDIA_BACKEND=livekit
+LIVE_PUBLISH_MODE=webrtc
+LIVE_PLAYBACK_MODE=webrtc
+LIVE_FALLBACK_ENABLED=true
+LIVE_FALLBACK_MODE=legacy_jpeg
+LIVEKIT_WS_URL=wss://your-livekit-host
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
+```
+
+含义：
+
+- `WebRTC` 是站内实时主链路。
+- `legacy_jpeg` 仅作为回退/诊断链路，不应继续作为默认观看体验。
+- 直播列表缩略图仍依赖 `push-frame -> last-frame` 的低频 JPEG 预览缓存；即使已接通 LiveKit，也不要删除这条轻量预览路径。
+
 ## 3. 直接运行（无 Docker）
 
 ```bash
@@ -114,6 +133,7 @@ location /api/ws/ {
   - **`curl -I` / `curl -sI` 发的是 HEAD**；`/api/live/last-frame/` 已支持 HEAD。要拉一整张图自检请用：`curl -sS -o /tmp/f.jpg 'https://你的域名/api/live/last-frame/用户名'`（GET）。
 
 - 直播状态仅在 **单进程** 内存中广播；`uvicorn --workers` 大于 1 时各 worker 互不共享。**站内直播建议 `--workers 1`**，或后续改为 Redis 等跨进程方案。
+- 当前 `last-frame` 还承担直播列表实时缩略图职责，因此如果仍使用单机 fallback/preview 缓存，部署时同样要满足上面的 **单 worker 或共享缓存** 约束。
 
 ## 6. 可选能力
 

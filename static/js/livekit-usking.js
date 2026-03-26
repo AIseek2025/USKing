@@ -35,7 +35,7 @@
   }
 
   /**
-   * @param {{ url: string, token: string, videoEl: HTMLVideoElement|null, onConnected?: function, onError?: function }} opts
+   * @param {{ url: string, token: string, videoEl: HTMLVideoElement|null, onConnected?: function, onError?: function, onTrackSubscribed?: function, onAudioTrack?: function, onAudioPlaybackBlocked?: function }} opts
    * @returns {Promise<object>} room
    */
   function viewerConnect(opts) {
@@ -53,8 +53,13 @@
       var token = opts.token;
       var firstVideo = false;
 
-      function attachIfRemote(track, participant) {
+      function attachIfRemote(track, participant, publication) {
         if (!participant || participant.isLocal) return;
+        if (opts.onTrackSubscribed) {
+          try {
+            opts.onTrackSubscribed(track, publication, participant);
+          } catch (e) {}
+        }
         if (track.kind === 'video' && videoEl) {
           track.attach(videoEl);
           videoEl.style.display = '';
@@ -68,13 +73,27 @@
         if (track.kind === 'audio') {
           var a = track.attach();
           a.style.display = 'none';
+          a.dataset.lkTrackKind = 'audio';
+          a.dataset.lkTrackName =
+            (publication && (publication.trackName || publication.name)) || '';
           (videoEl && videoEl.parentNode ? videoEl.parentNode : document.body).appendChild(a);
-          a.play().catch(function () {});
+          if (opts.onAudioTrack) {
+            try {
+              opts.onAudioTrack(track, publication, participant, a);
+            } catch (e) {}
+          }
+          a.play().catch(function (err) {
+            if (opts.onAudioPlaybackBlocked) {
+              try {
+                opts.onAudioPlaybackBlocked(err, track, publication, participant, a);
+              } catch (e) {}
+            }
+          });
         }
       }
 
       room.on(RoomEvent.TrackSubscribed, function (track, publication, participant) {
-        attachIfRemote(track, participant);
+        attachIfRemote(track, participant, publication);
       });
 
       room.on(RoomEvent.Disconnected, function () {
@@ -89,7 +108,7 @@
         room.remoteParticipants.forEach(function (p) {
           p.trackPublications.forEach(function (pub) {
             if (pub.track) {
-              attachIfRemote(pub.track, p);
+              attachIfRemote(pub.track, p, pub);
             }
           });
         });

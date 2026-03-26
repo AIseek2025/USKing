@@ -66,14 +66,18 @@
   - `page`：tab/system audio
   - `mic`：`getUserMedia({ audio: true })`
 - 主节目输出：
-  - `canvas.captureStream(30)` + mixed audio
+  - 视频：`canvas.captureStream(30)`
+  - 音频：独立发布 `page` / `mic` 两条轨
+- 列表/回退预览：
+  - 主播端在 LiveKit 主链路下仍保留低频 JPEG 预览推送，用于直播列表缩略图和 fallback 诊断；该预览不是正式实时观看主链路
 
 ## 兼容策略
 - 当 `LIVE_MEDIA_BACKEND=legacy_jpeg` 时，前端仍可走：
   - `POST /api/live/push-frame`
   - `GET /api/live/last-frame/{username}`
   - `/api/ws/live/audio/*`
-- 当切换到 `livekit` 时，业务层继续复用当前直播权限和房间元数据，只替换媒体链路。
+- 当切换到 `livekit` 时，业务层继续复用当前直播权限和房间元数据，只替换媒体链路；站内观看优先走 `webrtc`，`legacy_jpeg` 仅保留为显式 fallback / 诊断。
+- 直播列表不直接消费 WebRTC 房间，而是读取低频 JPEG 预览缓存；因此即使正式观看走 WebRTC，仍需要保留轻量预览推送。
 
 ## 执行手册
 - 详细执行规则：[`docs/LIVE_GSTACK_COMPOSER2_EXECUTION.md`](./LIVE_GSTACK_COMPOSER2_EXECUTION.md)

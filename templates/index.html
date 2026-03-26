@@ -912,6 +912,7 @@ function dashRefreshI18n(){
 /* Capture engine (embedded) */
 let _dSources=[], _dRAF=null, _dLayout='auto', _dLive=false, _dStart=0, _dTimerInt=null;
 let _dFramePushTimer=null, _dFramePushInFlight=false, _dStreamCanvas=null, _dStreamCtx=null;
+let _dPreviewPushTimer=null, _dPreviewPushInFlight=false, _dPreviewCanvas=null, _dPreviewCtx=null;
 let _dMicStream=null, _dLiveAudioPub=null, _dLiveKitRoom=null;
 var _dProgMode='webMain_camPip', _dCamStream=null, _dCamVideo=null, _dShowScreen=true, _dShowCam=true, _dOff=null;
 const _dLAYOUTS={
@@ -1200,6 +1201,13 @@ function dashEnsureStreamCanvas(){
     _dStreamCtx=_dStreamCanvas.getContext('2d');
   }
 }
+function dashEnsurePreviewCanvas(){
+  if(!_dPreviewCanvas){
+    _dPreviewCanvas=document.createElement('canvas');
+    _dPreviewCanvas.width=480;_dPreviewCanvas.height=270;
+    _dPreviewCtx=_dPreviewCanvas.getContext('2d');
+  }
+}
 /** 与 /app/live.html 一致：legacy fallback 仍靠 POST push-frame 收画面（SPA 后台也必须推） */
 function dashStartFramePushToSite(){
   dashEnsureStreamCanvas();
@@ -1230,6 +1238,39 @@ function dashStopFramePushToSite(){
   if(_dFramePushTimer){clearInterval(_dFramePushTimer);_dFramePushTimer=null}
   _dFramePushInFlight=false;
 }
+function dashStartPreviewFramePushToSite(){
+  dashEnsurePreviewCanvas();
+  if(_dPreviewPushTimer)clearInterval(_dPreviewPushTimer);
+  _dPreviewPushInFlight=false;
+  const tick=()=>{
+    if(!_dLive||_dPreviewPushInFlight)return;
+    if(!_dSources.length&&!_dCamStream)return;
+    const cv=document.getElementById('dashCanvas');
+    if(!cv||!cv.width)return;
+    try{_dPreviewCtx.drawImage(cv,0,0,480,270)}catch(e){return}
+    _dPreviewCanvas.toBlob((blob)=>{
+      if(!blob||!_dLive)return;
+      _dPreviewPushInFlight=true;
+      blob.arrayBuffer()
+        .then((buf)=>{
+          const hdrs={'Content-Type':'image/jpeg'};
+          if(typeof APP!=='undefined'&&APP.token)hdrs['Authorization']='Bearer '+APP.token;
+          return fetch(location.origin+'/api/live/push-frame',{method:'POST',credentials:'include',headers:hdrs,body:buf});
+        })
+        .catch(()=>{})
+        .finally(()=>{_dPreviewPushInFlight=false});
+    },'image/jpeg',0.42);
+  };
+  tick();
+  _dPreviewPushTimer=setInterval(tick,2500);
+}
+function dashStopPreviewFramePushToSite(){
+  if(_dPreviewPushTimer){clearInterval(_dPreviewPushTimer);_dPreviewPushTimer=null}
+  _dPreviewPushInFlight=false;
+}
+function dashMissingPageAudioRequested(pageAudTrack){
+  return !!(document.getElementById('dashCapPageAudio')&&document.getElementById('dashCapPageAudio').checked)&&!pageAudTrack;
+}
 
 async function startStream(){
   const err=document.getElementById('liveErr');if(err)err.style.display='none';
@@ -1253,6 +1294,7 @@ async function startStream(){
       }
     }
     var micTrack=_dMicStream&&_dMicStream.getAudioTracks&&_dMicStream.getAudioTracks().length?_dMicStream.getAudioTracks()[0]:null;
+    if(dashMissingPageAudioRequested(pageAudTrack))alert(_t('dash.page_audio_missing'));
     var usedLiveKit=false;
     try{
       var cfg=await APP.api('GET','/api/live/media/config');
@@ -1282,6 +1324,8 @@ async function startStream(){
         _dLiveAudioPub=new USKingLiveAudio.Publisher((APP.token)||'');
         _dLiveAudioPub.start(pageAud,_dMicStream);
       }
+    }else{
+      dashStartPreviewFramePushToSite();
     }
   }catch(e){if(err){err.textContent=e.message;err.style.display='block'}}
 }
@@ -1293,6 +1337,7 @@ async function stopStream(){
     _dLiveKitRoom=null;
   }
   dashStopFramePushToSite();
+  dashStopPreviewFramePushToSite();
   if(_dLiveAudioPub){_dLiveAudioPub.stop();_dLiveAudioPub=null;}
   if(_dMicStream){_dMicStream.getTracks().forEach(function(t){t.stop();});_dMicStream=null;}
   await APP.api('POST','/api/live/stop');
