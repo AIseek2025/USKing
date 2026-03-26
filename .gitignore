@@ -39,6 +39,7 @@ tmp/
 # Local deploy / access helpers (do not commit)
 *.exp
 *.tar.gz
+/deploy.sh
 deploy-*/
 test_ssh.py
 

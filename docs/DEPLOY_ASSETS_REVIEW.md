@@ -7,10 +7,11 @@
 
 ## 1. 审计结论
 
-当前阶段，USKing 的**唯一正式部署入口**应定义为：
+当前阶段，USKing 的**权威部署来源**应定义为：
 
 1. [`docs/DEPLOY.md`](./DEPLOY.md)
 2. 仓库根目录 [`docker-compose.prod.yml`](../docker-compose.prod.yml)
+3. 固定目录下的辅助脚本 [`deploy/README.md`](../deploy/README.md)
 
 这两者已经足以表达：
 
@@ -19,7 +20,10 @@
 - Docker Compose 启动方式
 - 端口、数据卷、健康检查等正式约束
 
-因此，**现阶段不建议**把 `deploy.sh` 或 `deploy-20260325-172328/` 整包直接纳入正式推送产物。
+因此，当前应采用的策略是：
+
+- 把新 `deploy/` 目录作为**可入库的辅助层**
+- 把根目录 `deploy.sh` 与 `deploy-20260325-172328/` 继续视为历史本地资产
 
 ---
 
@@ -90,10 +94,14 @@
 
 ## 4. 当前建议的仓库策略
 
-### 4.1 现在保留为正式入口的
+### 4.1 现在保留为正式入口/辅助层的
 
 - [`docs/DEPLOY.md`](./DEPLOY.md)
 - [`docker-compose.prod.yml`](../docker-compose.prod.yml)
+- [`deploy/README.md`](../deploy/README.md)
+- [`deploy/server-setup.sh`](../deploy/server-setup.sh)
+- [`deploy/start.sh`](../deploy/start.sh)
+- [`deploy/nginx/usking.conf.example`](../deploy/nginx/usking.conf.example)
 
 ### 4.2 现在继续留本地、不推送的
 
@@ -102,9 +110,9 @@
 - `.env`
 - 含登录凭据或上传操作的临时辅助脚本
 
-### 4.3 未来若确实需要“正式部署脚本”，建议这样入库
+### 4.3 现已采用的固定目录结构
 
-建议采用固定目录，而不是时间戳快照：
+仓库内现已采用固定目录，而不是时间戳快照：
 
 ```text
 deploy/
@@ -115,7 +123,7 @@ deploy/
     └── usking.vip.conf.example
 ```
 
-入库前必须满足：
+当前这套 `deploy/` 继续成立的前提是：
 
 1. 不含真实密码、密钥、`.env` 实值
 2. 使用占位符，而不是把单台服务器信息写死为唯一真相
@@ -126,17 +134,19 @@ deploy/
 
 ## 5. 给 Composer 的执行规则
 
-当仓库里同时出现 `deploy.sh`、`deploy-时间戳目录/`、`docker-compose.prod.yml`、`docs/DEPLOY.md` 时，优先级必须是：
+当仓库里同时出现 `deploy.sh`、`deploy-时间戳目录/`、`deploy/`、`docker-compose.prod.yml`、`docs/DEPLOY.md` 时，优先级必须是：
 
 1. `docs/DEPLOY.md`
 2. `docker-compose.prod.yml`
-3. 其余脚本仅视为候选本地辅助资产
+3. `deploy/`
+4. 其余脚本仅视为候选本地辅助资产
 
 除非人类明确要求，否则：
 
 - 不把时间戳快照目录加入 Git
 - 不把复制 `.env` 的脚本当正式产物提交
 - 不新增第二份长期生产 compose
+- 不把根目录旧 `deploy.sh` 恢复为正式入口
 
 ---
 

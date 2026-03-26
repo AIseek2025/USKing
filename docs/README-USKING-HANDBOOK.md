@@ -134,6 +134,7 @@ uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 架构设想与模块 |
 | [DEPLOY.md](./DEPLOY.md) | 生产部署清单 |
 | [DEPLOY_ASSETS_REVIEW.md](./DEPLOY_ASSETS_REVIEW.md) | 本地部署脚本/快照是否值得入库的审计结论 |
+| [`../deploy/README.md`](../deploy/README.md) | 固定目录下的部署辅助脚本说明 |
 | [LIVE_ARCHITECTURE_UPGRADE.md](./LIVE_ARCHITECTURE_UPGRADE.md) | 直播升级总览 |
 | [LIVE_ROLLOUT_PHASES.md](./LIVE_ROLLOUT_PHASES.md) | 分阶段上线 |
 | [LIVE_PHASE3_EGRESS.md](./LIVE_PHASE3_EGRESS.md) | Phase 3 egress 纲要 |
@@ -153,6 +154,7 @@ uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 - **安全**：勿提交真实密钥、`.env` 副本；生产变量见 `docs/DEPLOY.md`。  
 - **Git**：大仓库推送问题见根目录 `README.md` 中 `http.postBuffer` 说明。
 - **推送边界**：提交前先对照 [`docs/COMPOSER_PUSH_BOUNDARY.md`](./COMPOSER_PUSH_BOUNDARY.md) 判断哪些文件该推、哪些应留本地。
+- **部署入口**：权威来源优先看 `docs/DEPLOY.md` 与 `docker-compose.prod.yml`，`deploy/` 仅作为固定辅助层，不再使用根目录旧 `deploy.sh` 做正式入口。
 
 ---
 

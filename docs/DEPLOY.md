@@ -10,7 +10,7 @@
 | `DEV_MODE` | 设为 `false`。未设置时开发默认 `true`，不适合生产。 |
 | `MEIGUWANG_ADMIN_PASSWORD` | 首次启动创建 `admin` 时使用的密码；**仅在库中无 admin 时生效**。创建后请改密或依赖业务侧账号体系。 |
 | 数据库 | 单机可用 SQLite（注意备份 `*.db`）；多实例请用 PostgreSQL 等，并设置 `DATABASE_URL`。PostgreSQL 需安装驱动：`pip install psycopg2-binary`。 |
-| HTTPS | 生产务必由 **Nginx / Caddy / 云 LB** 终止 TLS，反代到本服务（如 `127.0.0.1:8000`）。 |
+| HTTPS | 生产务必由 **Nginx / Caddy / 云 LB** 终止 TLS；若使用仓库内 Docker Compose 示例，反代到 `127.0.0.1:8002`；若直接运行应用，可反代到 `127.0.0.1:8000`。 |
 | 静态与上传 | 默认上传目录为项目下 `static/uploads`；Docker 示例通过 `UPLOAD_DIR=/data/uploads` 挂载卷持久化。访问 **`/static/uploads/*` 由独立路由从 `UPLOAD_DIR` 读盘**，避免被 `StaticFiles(/app/static)` 抢先匹配到镜像内空目录导致 **头像/图片 404**。 |
 
 应用启动时若 `DEV_MODE=false` 且仍使用默认 `SECRET_KEY`，进程会**直接退出**（防止误部署）。
@@ -46,6 +46,33 @@ docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 数据卷 `usking-data` 内包含：`/data/meiguwang.db`、`/data/uploads`。
+
+## 4.1 可选：使用仓库内 `deploy/` 辅助脚本
+
+若你希望把重复性部署动作收敛成固定脚本，而不是保留本地时间戳快照，可使用：
+
+- [`deploy/README.md`](../deploy/README.md)
+- [`deploy/server-setup.sh`](../deploy/server-setup.sh)
+- [`deploy/start.sh`](../deploy/start.sh)
+- [`deploy/nginx/usking.conf.example`](../deploy/nginx/usking.conf.example)
+
+这些文件是**辅助层**，不是第二套权威文档。权威来源仍然是：
+
+- 本文 [`docs/DEPLOY.md`](./DEPLOY.md)
+- [`docker-compose.prod.yml`](../docker-compose.prod.yml)
+
+推荐顺序：
+
+```bash
+# 1) 初始化服务器依赖与目录
+sudo APP_DIR=/opt/usking DATA_DIR=/data/usking bash deploy/server-setup.sh
+
+# 2) 同步仓库代码到 APP_DIR，并在服务器上创建 .env
+cp .env.example .env
+
+# 3) 启动服务
+APP_DIR=/opt/usking bash deploy/start.sh
+```
 
 ## 5. 反向代理要点
 

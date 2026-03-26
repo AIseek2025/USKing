@@ -19,6 +19,7 @@
 | 正式文档 | `docs/*.md`、模块 `README.md` | 需求、架构、部署、流程、手册、评审记录、工作报告。 |
 | 边界说明 | `services/*/README.md`、`infra/*/README.md` | 即使对应服务尚未完全落地，也可作为正式设计边界文档入库。 |
 | 正式部署定义 | `docker-compose.prod.yml`、`Dockerfile` | 前提是内容面向团队通用部署，而不是某台机器的临时快照。 |
+| 通用部署辅助资产 | `deploy/README.md`、`deploy/*.sh`、`deploy/nginx/*.example` | 仅限固定目录、可复用、无 `.env` 实值、无时间戳快照的正式辅助脚本。 |
 
 ---
 
@@ -42,10 +43,9 @@
 
 | 产物 | 当前状态 | 入库前要求 |
 |---|---|---|
-| `deploy.sh` | 本地部署辅助脚本 | 去除机器假设，避免复制 `.env` 实值，明确与 `docs/DEPLOY.md` 的关系。 |
-| 服务器初始化脚本 | 目前散落在部署快照目录 | 收敛到统一目录，如未来的 `deploy/`。 |
-| Nginx 配置样例 | 与快照目录绑定 | 提炼为通用模板，使用占位符而非具体服务器快照。 |
-| 生产 compose 变体 | 存在快照目录副本 | 只能保留一个 canonical 版本，避免多份长期分叉。 |
+| `deploy.sh` | 根目录遗留本地脚本 | 继续忽略，不作为正式入口；若保留，只作个人本地辅助。 |
+| 机器绑定部署脚本 | 写死公网 IP / 域名 / 固定目录 | 必须改造成 `deploy/` 下的通用模板后才能入库。 |
+| 生产 compose 变体 | 快照目录副本或第二份 compose | 只能保留一个 canonical 版本，避免多份长期分叉。 |
 
 ---
 
@@ -83,6 +83,7 @@
 - `app/`
 - `static/js/`
 - `docs/`
+- `deploy/`
 - `.env.example`
 - `README.md`
 - `services/*/README.md`
@@ -93,6 +94,7 @@
 - `*.exp`
 - `*.tar.gz`
 - `deploy-*/`
+- `/deploy.sh`
 - `test_ssh.py`
 - `.env`
 - `static/uploads/*`
@@ -110,6 +112,7 @@
 ## 6. 与其他文档的关系
 
 - 正式部署步骤以 [`docs/DEPLOY.md`](./DEPLOY.md) 为主。
+- 固定部署辅助脚本以 [`deploy/README.md`](../deploy/README.md) 为主。
 - 直播架构边界以 [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](./LIVE_ARCHITECTURE_UPGRADE.md) 为主。
 - 文档新增与 README 工作规范以 [`docs/README-USKING-HANDBOOK.md`](./README-USKING-HANDBOOK.md) 为主。
 
