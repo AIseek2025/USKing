@@ -850,7 +850,7 @@ async function initDashboard(){
         <div style="padding:12px 14px;border-bottom:1px solid var(--bg3)">
           <h3 style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px" data-i18n="dash.audio_h">站内直播声音</h3>
           <p style="font-size:10px;color:var(--text3);line-height:1.5;margin-bottom:8px" data-i18n="dash.audio_hint_live">共享窗口时在系统对话框中开启音频；修改选项后请移除窗口并重新添加。</p>
-          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);cursor:pointer;margin-bottom:6px;user-select:none"><input type="checkbox" id="dashCapPageAudio" /> <span data-i18n="dash.cap_page_audio">采集画面/系统声音</span></label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);cursor:pointer;margin-bottom:6px;user-select:none"><input type="checkbox" id="dashCapPageAudio" checked /> <span data-i18n="dash.cap_page_audio">采集画面/系统声音</span></label>
           <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2);cursor:pointer;user-select:none"><input type="checkbox" id="dashCapMicAudio" checked /> <span data-i18n="dash.cap_mic_audio">采集麦克风</span></label>
         </div>
         <!-- Settings -->
@@ -883,6 +883,7 @@ async function initDashboard(){
       document.getElementById('btnStop').style.display='';
       _dLive=true;
       dashStartFramePushToSite();
+      setTimeout(function(){dashEnsureRealtimeTransport({showError:false,warnOnMissingPageAudio:false});},0);
     }
   }catch{}
   dashRefreshI18n();
@@ -917,7 +918,7 @@ function dashRefreshI18n(){
 let _dSources=[], _dRAF=null, _dLayout='auto', _dLive=false, _dStart=0, _dTimerInt=null;
 let _dFramePushTimer=null, _dFramePushInFlight=false, _dStreamCanvas=null, _dStreamCtx=null;
 let _dPreviewPushTimer=null, _dPreviewPushInFlight=false, _dPreviewCanvas=null, _dPreviewCtx=null;
-let _dMicStream=null, _dLiveAudioPub=null, _dLiveKitRoom=null;
+let _dMicStream=null, _dLiveAudioPub=null, _dLiveKitRoom=null, _dLiveKitConnecting=null;
 var _dProgMode='webMain_camPip', _dCamStream=null, _dCamVideo=null, _dShowScreen=true, _dShowCam=true, _dOff=null;
 const _dLAYOUTS={
   single:{cells:n=>[{x:0,y:0,w:1,h:1}]},
@@ -1010,6 +1011,7 @@ async function dashEnsureCamera(){
     _dCamVideo=v;
     dashUpdateUI();dashStartComposite();
     dashBuildProgLayouts();
+    if(_dLive)dashEnsureRealtimeTransport({showError:false,warnOnMissingPageAudio:false});
   }catch(e){
     alert(typeof _t==='function'?_t('dash.cam_denied'):String(e));
   }
@@ -1124,6 +1126,7 @@ async function dashAddSource(){
     track.onended=()=>dashRemoveSource(src.id);
     _dSources.push(src);
     dashUpdateUI();dashStartComposite();
+    if(_dLive)dashEnsureRealtimeTransport({showError:false,warnOnMissingPageAudio:false});
   }catch(e){if(e.name!=='NotAllowedError')console.error('采集失败:',e)}
 }
 
@@ -1276,6 +1279,63 @@ function dashMissingPageAudioRequested(pageAudTrack){
   return !!(document.getElementById('dashCapPageAudio')&&document.getElementById('dashCapPageAudio').checked)&&!pageAudTrack;
 }
 
+async function dashEnsureRealtimeTransport(opts){
+  opts=opts||{};
+  if(!_dLive)return false;
+  if(_dLiveKitRoom)return true;
+  if(_dLiveKitConnecting)return _dLiveKitConnecting;
+  const err=document.getElementById('liveErr');
+  _dLiveKitConnecting=(async function(){
+    const cv=document.getElementById('dashCanvas');
+    if(!cv||!cv.width||(!_dSources.length&&!_dCamStream))return false;
+    if((opts.ensureMic!==false)&&document.getElementById('dashCapMicAudio')&&document.getElementById('dashCapMicAudio').checked&&(!_dMicStream||!_dMicStream.getAudioTracks||!_dMicStream.getAudioTracks().length)){
+      try{_dMicStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});}catch(e){console.warn('mic',e);}
+    }
+    var pageAud=null,pageAudTrack=null;
+    for(var si=0;si<_dSources.length;si++){
+      if(_dSources[si].stream.getAudioTracks&&_dSources[si].stream.getAudioTracks().length){
+        pageAud=_dSources[si].stream;
+        pageAudTrack=_dSources[si].stream.getAudioTracks()[0];
+        break;
+      }
+    }
+    var micTrack=_dMicStream&&_dMicStream.getAudioTracks&&_dMicStream.getAudioTracks().length?_dMicStream.getAudioTracks()[0]:null;
+    if((opts.warnOnMissingPageAudio!==false)&&dashMissingPageAudioRequested(pageAudTrack))alert(_t('dash.page_audio_missing'));
+    try{
+      var cfg=await APP.api('GET','/api/live/media/config');
+      var wantLk=cfg.backend==='livekit'&&cfg.livekit&&cfg.livekit.ready&&(cfg.publish_mode==='webrtc'||cfg.publish_mode==='livekit');
+      if(!(wantLk&&typeof USKingLiveKit!=='undefined'))return false;
+      var hs=await APP.api('POST','/api/live/media/host-session');
+      var lk=hs.session&&hs.session.livekit;
+      if(!lk||!lk.token)return false;
+      await USKingLiveKit.loadScript();
+      var cap=cv.captureStream(30);
+      var vtrack=cap.getVideoTracks&&cap.getVideoTracks().length?cap.getVideoTracks()[0]:null;
+      if(!vtrack||vtrack.readyState!=='live')throw new Error('当前页还没有可发布的视频轨');
+      _dLiveKitRoom=await USKingLiveKit.hostConnect({
+        url:lk.ws_url,token:lk.token,videoTrack:vtrack,
+        audioPageTrack:pageAudTrack,audioMicTrack:micTrack,
+        iceServers:(hs.session&&hs.session.ice_servers)||(hs.session&&hs.session.livekit&&hs.session.livekit.ice_servers)||[],
+        peerConnectionTimeout:25000
+      });
+      dashStopFramePushToSite();
+      if(_dLiveAudioPub){_dLiveAudioPub.stop();_dLiveAudioPub=null;}
+      dashStartPreviewFramePushToSite();
+      if(err)err.style.display='none';
+      return true;
+    }catch(e){
+      console.error('[LK:host] ensure realtime failed →',e&&e.message||e);
+      if(opts.showError!==false&&err){err.textContent='WebRTC: '+(e&&e.message||'连接失败，暂时回退');err.style.display='block';}
+      return false;
+    }
+  })();
+  try{
+    return await _dLiveKitConnecting;
+  }finally{
+    _dLiveKitConnecting=null;
+  }
+}
+
 async function startStream(){
   const err=document.getElementById('liveErr');if(err)err.style.display='none';
   try{
@@ -1299,32 +1359,7 @@ async function startStream(){
     }
     var micTrack=_dMicStream&&_dMicStream.getAudioTracks&&_dMicStream.getAudioTracks().length?_dMicStream.getAudioTracks()[0]:null;
     if(dashMissingPageAudioRequested(pageAudTrack))alert(_t('dash.page_audio_missing'));
-    var usedLiveKit=false;
-    try{
-      var cfg=await APP.api('GET','/api/live/media/config');
-      var wantLk=cfg.backend==='livekit'&&cfg.livekit&&cfg.livekit.ready&&(cfg.publish_mode==='webrtc'||cfg.publish_mode==='livekit');
-      if(wantLk&&typeof USKingLiveKit!=='undefined'){
-        var hs=await APP.api('POST','/api/live/media/host-session');
-        var lk=hs.session&&hs.session.livekit;
-        if(lk&&lk.token){
-          await USKingLiveKit.loadScript();
-          var cv=document.getElementById('dashCanvas');
-          if(cv&&cv.width){
-            var cap=cv.captureStream(30);
-            var vtrack=cap.getVideoTracks()[0];
-            _dLiveKitRoom=await USKingLiveKit.hostConnect({
-              url:lk.ws_url,token:lk.token,videoTrack:vtrack,
-              audioPageTrack:pageAudTrack,audioMicTrack:micTrack
-            });
-            usedLiveKit=true;
-          }
-        }
-      }
-    }catch(e){
-      console.error('[LK:host] connect failed →', e && e.message || e);
-      var lkErr=document.getElementById('liveErr');
-      if(lkErr){lkErr.textContent='WebRTC: '+(e&&e.message||'连接失败，回退到低延迟模式');lkErr.style.display='block';}
-    }
+    var usedLiveKit=await dashEnsureRealtimeTransport({ensureMic:false,showError:true,warnOnMissingPageAudio:false});
     if(!usedLiveKit){
       dashStartFramePushToSite();
       if(typeof USKingLiveAudio!=='undefined'){
@@ -1332,8 +1367,6 @@ async function startStream(){
         _dLiveAudioPub=new USKingLiveAudio.Publisher((APP.token)||'');
         _dLiveAudioPub.start(pageAud,_dMicStream);
       }
-    }else{
-      dashStartPreviewFramePushToSite();
     }
   }catch(e){if(err){err.textContent=e.message;err.style.display='block'}}
 }

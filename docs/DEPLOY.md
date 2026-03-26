@@ -43,6 +43,28 @@ LIVEKIT_API_SECRET=your_api_secret
 - `legacy_jpeg` 仅作为回退/诊断链路，不应继续作为默认观看体验。
 - 直播列表缩略图仍依赖 `push-frame -> last-frame` 的低频 JPEG 预览缓存；即使已接通 LiveKit，也不要删除这条轻量预览路径。
 
+### 独立 coturn（强烈推荐）
+
+生产环境 WebRTC 跨网、手机、企业网通常 **必须 TURN**。推荐部署 **独立 coturn**，与 LiveKit 内置 TURN 解耦；USKing 通过 `POST /api/live/media/host-session` 与 `GET /api/live/media/viewer-session/{user}` 返回标准字段 **`ice_servers`**（`urls` + `username` + `credential`），前端 `livekit-usking.js` 将其传入 `Room.connect(..., { rtcConfig })`。
+
+配置步骤与端口清单见仓库 [`infra/turn/README.md`](../infra/turn/README.md)。环境变量见根目录 `.env.example` 中 `TURN_*`。
+
+生产上已验证的一组稳定组合是：
+
+```bash
+TURN_ENABLED=true
+TURN_UDP_URL=turn:turn.example.com:3478?transport=udp
+TURN_TLS_URL=
+TURN_STUN_URLS=stun:stun.l.google.com:19302
+```
+
+配套网络端口建议固定为：
+
+- coturn：`3478` + `50000-54999`
+- LiveKit：`7881` + `55000-60000`
+
+**回滚**：将 `TURN_ENABLED=false` 并重启应用；前端不再注入 `rtcConfig`，回退为 LiveKit 客户端默认 ICE。
+
 ## 3. 直接运行（无 Docker）
 
 ```bash

@@ -64,6 +64,15 @@ LIVE_HLS_BASE_URL = os.getenv("LIVE_HLS_BASE_URL", "").strip()
 LIVE_TURN_URLS = [
     u.strip() for u in os.getenv("LIVE_TURN_URLS", "").split(",") if u.strip()
 ]
+# 独立 coturn（TURN REST + static-auth-secret），与 LIVE_TURN_URLS 并存；会话接口会签发 ice_servers
+TURN_ENABLED = os.getenv("TURN_ENABLED", "false").lower() in ("1", "true", "yes")
+TURN_REALM = os.getenv("TURN_REALM", "").strip()
+TURN_SHARED_SECRET = os.getenv("TURN_SHARED_SECRET", "").strip()
+TURN_UDP_URL = os.getenv("TURN_UDP_URL", "").strip()
+TURN_TLS_URL = os.getenv("TURN_TLS_URL", "").strip()
+TURN_CREDENTIAL_TTL_SECONDS = int(os.getenv("TURN_CREDENTIAL_TTL_SECONDS", "86400"))
+_turn_stun = os.getenv("TURN_STUN_URLS", "").strip()
+TURN_STUN_URLS = [u.strip() for u in _turn_stun.split(",") if u.strip()]
 LIVEKIT_WS_URL = os.getenv("LIVEKIT_WS_URL", "").strip()
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "").strip()
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "").strip()

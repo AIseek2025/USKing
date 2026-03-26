@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -19,6 +23,13 @@ from .config import (
     LIVEKIT_API_KEY,
     LIVEKIT_API_SECRET,
     LIVEKIT_WS_URL,
+    TURN_CREDENTIAL_TTL_SECONDS,
+    TURN_ENABLED,
+    TURN_REALM,
+    TURN_SHARED_SECRET,
+    TURN_STUN_URLS,
+    TURN_TLS_URL,
+    TURN_UDP_URL,
 )
 from .models import LiveStream, User
 
@@ -51,6 +62,46 @@ def legacy_transport_for_username(username: str) -> dict[str, Any]:
 
 def livekit_ready() -> bool:
     return bool(LIVEKIT_WS_URL and LIVEKIT_API_KEY and LIVEKIT_API_SECRET)
+
+
+def turn_configured() -> bool:
+    """独立 coturn：需启用开关、共享密钥，且至少配置一条 TURN URL。"""
+    if not TURN_ENABLED or not TURN_SHARED_SECRET:
+        return False
+    return bool(TURN_UDP_URL or TURN_TLS_URL)
+
+
+def _turn_rest_credential(secret: str, username: str) -> str:
+    """coturn static-auth-secret：password = base64(hmac_sha1(secret, username))。"""
+    digest = hmac.new(
+        secret.encode("utf-8"), username.encode("utf-8"), hashlib.sha1
+    ).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+
+def build_turn_ice_servers(identity: str) -> list[dict[str, Any]]:
+    """
+    生成浏览器 RTCPeerConnection.iceServers 兼容结构。
+    identity 建议使用稳定字符串（如 host:uid / viewer:uid / anon:...），与 coturn 审计一致。
+    """
+    if not turn_configured():
+        return []
+    urls: list[str] = []
+    if TURN_UDP_URL:
+        urls.append(TURN_UDP_URL)
+    if TURN_TLS_URL:
+        urls.append(TURN_TLS_URL)
+    if not urls:
+        return []
+    expiry = int(time.time()) + max(60, TURN_CREDENTIAL_TTL_SECONDS)
+    uname = f"{expiry}:{identity}"
+    cred = _turn_rest_credential(TURN_SHARED_SECRET, uname)
+    servers: list[dict[str, Any]] = [
+        {"urls": urls, "username": uname, "credential": cred}
+    ]
+    for stun in TURN_STUN_URLS:
+        servers.append({"urls": [stun]})
+    return servers
 
 
 def _livekit_token(
@@ -92,6 +143,7 @@ def media_backend_summary() -> dict[str, Any]:
         if LIVE_MEDIA_BACKEND == "livekit" and livekit_ok and LIVE_PLAYBACK_MODE == "webrtc"
         else LIVE_PLAYBACK_MODE
     )
+    tc = turn_configured()
     return {
         "backend": LIVE_MEDIA_BACKEND,
         "publish_mode": LIVE_PUBLISH_MODE,
@@ -102,6 +154,11 @@ def media_backend_summary() -> dict[str, Any]:
         "preview_mode": "jpeg_snapshot",
         "signaling_url": LIVE_SIGNALING_URL,
         "turn_urls": LIVE_TURN_URLS,
+        "turn_enabled": tc,
+        "turn_realm": TURN_REALM,
+        "turn_mode": "rest" if tc else "off",
+        # 不含凭证；完整 ice_servers 仅由 host-session / viewer-session 返回
+        "ice_servers": [],
         "livekit": {
             "enabled": LIVE_MEDIA_BACKEND == "livekit",
             "ready": livekit_ok,
@@ -161,19 +218,24 @@ def host_session_payload(user: User, stream: LiveStream) -> dict[str, Any]:
             },
         },
     }
+    ice: list[dict[str, Any]] = []
     if LIVE_MEDIA_BACKEND == "livekit" and livekit_ready():
+        hid = f"host:{user.id}"
+        ice = build_turn_ice_servers(hid)
         payload["livekit"] = {
             "ws_url": LIVEKIT_WS_URL,
             "room_name": room,
             "token": _livekit_token(
-                identity=f"host:{user.id}",
+                identity=hid,
                 room=room,
                 can_publish=True,
                 can_subscribe=True,
                 name=user.display_name or user.username,
                 metadata={"role": "host", "username": user.username},
             ),
+            "ice_servers": ice,
         }
+        payload["ice_servers"] = ice
     return payload
 
 
@@ -194,6 +256,7 @@ def viewer_session_payload(
         "identity": identity,
     }
     if LIVE_MEDIA_BACKEND == "livekit" and livekit_ready() and stream and stream.is_live:
+        ice = build_turn_ice_servers(identity)
         payload["livekit"] = {
             "ws_url": LIVEKIT_WS_URL,
             "room_name": room,
@@ -209,5 +272,7 @@ def viewer_session_payload(
                     "viewer_id": viewer.id if viewer else "",
                 },
             ),
+            "ice_servers": ice,
         }
+        payload["ice_servers"] = ice
     return payload

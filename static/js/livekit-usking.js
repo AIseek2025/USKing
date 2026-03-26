@@ -17,6 +17,201 @@
     }
   };
 
+  function _isIPv4(host) {
+    if (!/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return false;
+    var parts = host.split('.');
+    for (var i = 0; i < parts.length; i++) {
+      var n = Number(parts[i]);
+      if (n < 0 || n > 255) return false;
+    }
+    return true;
+  }
+
+  function _isValidHostname(host) {
+    if (!host) return false;
+    if (_isIPv4(host)) return true;
+    if (host.indexOf('[') === 0 && host.lastIndexOf(']') === host.length - 1) return true;
+    var labels = host.split('.');
+    if (!labels.length) return false;
+    for (var i = 0; i < labels.length; i++) {
+      var label = labels[i];
+      if (!label) return false;
+      if (!/^[a-z0-9-]+$/i.test(label)) return false;
+      if (label.charAt(0) === '-' || label.charAt(label.length - 1) === '-') return false;
+    }
+    return true;
+  }
+
+  function _extractIceHost(url) {
+    var m = String(url || '').match(/^(stun|stuns|turn|turns):(.+)$/i);
+    if (!m) return '';
+    var rest = m[2].split('?')[0];
+    if (!rest) return '';
+    if (rest.charAt(0) === '[') {
+      var end = rest.indexOf(']');
+      return end === -1 ? '' : rest.slice(0, end + 1);
+    }
+    var idx = rest.lastIndexOf(':');
+    return idx === -1 ? rest : rest.slice(0, idx);
+  }
+
+  function _normalizeIceUrl(url) {
+    var raw = String(url || '');
+    var m = raw.match(/^(stun|stuns|turn|turns):(.+)$/i);
+    if (!m) return raw;
+    var scheme = m[1];
+    var restWithQuery = m[2];
+    var parts = restWithQuery.split('?');
+    var hostPort = parts[0];
+    var query = parts.length > 1 ? '?' + parts.slice(1).join('?') : '';
+    if (!hostPort) return raw;
+    if (hostPort.charAt(0) === '[') return raw;
+    var idx = hostPort.lastIndexOf(':');
+    var host = idx === -1 ? hostPort : hostPort.slice(0, idx);
+    var port = idx === -1 ? '' : hostPort.slice(idx);
+    var normalizedHost = host.replace(/[{}\s]/g, '');
+    if (normalizedHost !== host) {
+      return scheme + ':' + normalizedHost + port + query;
+    }
+    return raw;
+  }
+
+  function _parseIceCandidate(candidate) {
+    var text = String(candidate || '');
+    var out = { raw: text };
+    var m = text.match(/^candidate:\S+\s+\d+\s+(\w+)\s+\d+\s+(\S+)\s+(\d+)\s+typ\s+(\w+)/);
+    if (m) {
+      out.protocol = m[1];
+      out.address = m[2];
+      out.port = m[3];
+      out.type = m[4];
+    }
+    return out;
+  }
+
+  /**
+   * 仅使用后端下发的标准 ice_servers（含 turn/turns + username/credential + 可选 stun）。
+   * 未配置时不覆盖 rtcConfig，交给 LiveKit 客户端默认 ICE。
+   */
+  function _buildRtcConfig(opts) {
+    if (opts && opts.rtcConfig) return opts.rtcConfig;
+    var raw = opts && Array.isArray(opts.iceServers) ? opts.iceServers : [];
+    if (!raw.length) {
+      _log('rtc', 'no ice_servers from API; using LiveKit default ICE (no rtcConfig override)');
+      return undefined;
+    }
+    var iceServers = raw
+      .map(function (s) {
+        if (!s || s.urls == null) return null;
+        var urls = Array.isArray(s.urls) ? s.urls.slice() : [s.urls];
+        var out = { urls: urls };
+        if (s.username != null && s.username !== '') out.username = s.username;
+        if (s.credential != null && s.credential !== '') out.credential = s.credential;
+        return out;
+      })
+      .filter(Boolean);
+    if (!iceServers.length) return undefined;
+    _log(
+      'rtc',
+      'rtcConfig from API',
+      iceServers.map(function (x) {
+        return { urls: x.urls, hasAuth: !!(x.username && x.credential) };
+      })
+    );
+    return {
+      iceTransportPolicy: 'all',
+      iceServers: iceServers,
+    };
+  }
+
+  function _sanitizeRtcConfig(config) {
+    if (!config || !config.iceServers || !config.iceServers.length) return config;
+    var copy = {};
+    for (var k in config) copy[k] = config[k];
+    copy.iceServers = config.iceServers
+      .map(function (server) {
+        var urls = Array.isArray(server.urls) ? server.urls.slice() : [server.urls];
+        var clean = urls
+          .map(function (url) {
+            var normalized = _normalizeIceUrl(url);
+            if (normalized !== url) {
+              _log('rtc', 'rewrote ICE url', { before: url, after: normalized });
+            }
+            return normalized;
+          })
+          .filter(function (url) {
+          var host = _extractIceHost(url);
+          var ok = _isValidHostname(host);
+          if (!ok) _log('rtc', 'dropping invalid ICE url', { url: url, host: host });
+          return ok;
+        });
+        if (!clean.length) return null;
+        var out = {};
+        for (var k in server) out[k] = server[k];
+        out.urls = clean;
+        return out;
+      })
+      .filter(Boolean);
+    _log(
+      'rtc',
+      'sanitized ice servers',
+      copy.iceServers.map(function (s) { return s.urls; })
+    );
+    return copy;
+  }
+
+  function _installRtcDebugShim() {
+    if (global.__USKING_RTC_SHIM_INSTALLED) return;
+    var NativePC = global.RTCPeerConnection || global.webkitRTCPeerConnection;
+    if (!NativePC) return;
+    function WrappedRTCPeerConnection(config, constraints) {
+      var sanitized = config;
+      try {
+        sanitized = _sanitizeRtcConfig(config);
+      } catch (e) {
+        _log('rtc', 'sanitize rtc config failed', e && e.message ? e.message : e);
+      }
+      try {
+        var pc = new NativePC(sanitized, constraints);
+        try {
+          pc.addEventListener('icecandidate', function (ev) {
+            if (!ev || !ev.candidate || !ev.candidate.candidate) return;
+            _log('rtc', 'local candidate', _parseIceCandidate(ev.candidate.candidate));
+          });
+          pc.addEventListener('icecandidateerror', function (ev) {
+            _log('rtc', 'ice candidate error', {
+              url: ev && ev.url,
+              errorCode: ev && ev.errorCode,
+              errorText: ev && ev.errorText,
+            });
+          });
+          pc.addEventListener('iceconnectionstatechange', function () {
+            _log('rtc', 'ice connection state', pc.iceConnectionState);
+          });
+          pc.addEventListener('icegatheringstatechange', function () {
+            _log('rtc', 'ice gathering state', pc.iceGatheringState);
+          });
+          pc.addEventListener('connectionstatechange', function () {
+            _log('rtc', 'pc connection state', pc.connectionState);
+          });
+        } catch (e) {}
+        return pc;
+      } catch (e) {
+        _log('rtc', 'RTCPeerConnection construct failed', {
+          error: e && e.message ? e.message : String(e),
+          iceServers: sanitized && sanitized.iceServers ? sanitized.iceServers.map(function (s) { return s.urls; }) : [],
+        });
+        throw e;
+      }
+    }
+    WrappedRTCPeerConnection.prototype = NativePC.prototype;
+    try {
+      Object.setPrototypeOf(WrappedRTCPeerConnection, NativePC);
+    } catch (e) {}
+    global.RTCPeerConnection = WrappedRTCPeerConnection;
+    global.__USKING_RTC_SHIM_INSTALLED = true;
+  }
+
   function getLib() {
     var L = global.LivekitClient || global.livekit;
     if (!L || !L.Room) {
@@ -26,6 +221,7 @@
   }
 
   function loadScript() {
+    _installRtcDebugShim();
     if (global.LivekitClient || global.livekit) {
       return Promise.resolve();
     }
@@ -41,6 +237,106 @@
         reject(new Error('Failed to load livekit-client from CDN'));
       };
       document.head.appendChild(s);
+    });
+  }
+
+  function _closeHostResources(room) {
+    if (room && room.__uskingCleanup) {
+      try {
+        room.__uskingCleanup();
+      } catch (e) {}
+      room.__uskingCleanup = null;
+    }
+  }
+
+  function _buildMixedAudio(opts, Track) {
+    var pageTrack = opts.audioPageTrack;
+    var micTrack = opts.audioMicTrack;
+    var singleTrack = opts.audioTrack;
+    var liveTracks = [];
+    if (pageTrack && pageTrack.readyState === 'live') {
+      liveTracks.push({ track: pageTrack, kind: 'page' });
+    }
+    if (micTrack && micTrack.readyState === 'live') {
+      liveTracks.push({ track: micTrack, kind: 'mic' });
+    }
+    if (!liveTracks.length && singleTrack && singleTrack.readyState === 'live') {
+      return Promise.resolve({
+        track: singleTrack,
+        name: 'audio',
+        source: Track && Track.Source ? Track.Source.Microphone : undefined,
+        cleanup: function () {},
+      });
+    }
+    if (!liveTracks.length) {
+      return Promise.resolve(null);
+    }
+    var Ctx = global.AudioContext || global.webkitAudioContext;
+    if (!Ctx) {
+      _log('host', 'AudioContext unavailable, fallback to raw audio track');
+      return Promise.resolve({
+        track: liveTracks[0].track,
+        name: liveTracks.length > 1 ? 'audio' : liveTracks[0].kind,
+        source: Track && Track.Source ? Track.Source.Microphone : undefined,
+        cleanup: function () {},
+      });
+    }
+    var ctx = new Ctx();
+    var dest = ctx.createMediaStreamDestination();
+    var nodes = [];
+    liveTracks.forEach(function (item) {
+      var src = ctx.createMediaStreamSource(new MediaStream([item.track]));
+      var gain = ctx.createGain();
+      gain.gain.value = 1;
+      src.connect(gain);
+      gain.connect(dest);
+      nodes.push({ src: src, gain: gain });
+    });
+    var mixedTrack = dest.stream.getAudioTracks()[0];
+    if (!mixedTrack) {
+      nodes.forEach(function (item) {
+        try {
+          item.src.disconnect();
+          item.gain.disconnect();
+        } catch (e) {}
+      });
+      ctx.close().catch(function () {});
+      return Promise.resolve({
+        track: liveTracks[0].track,
+        name: liveTracks.length > 1 ? 'audio' : liveTracks[0].kind,
+        source: Track && Track.Source ? Track.Source.Microphone : undefined,
+        cleanup: function () {},
+      });
+    }
+    return Promise.resolve({
+      track: mixedTrack,
+      name: liveTracks.length > 1 ? 'audio' : liveTracks[0].kind,
+      source:
+        liveTracks.length > 1
+          ? Track && Track.Source
+            ? Track.Source.Microphone
+            : undefined
+          : liveTracks[0].kind === 'page'
+            ? Track && Track.Source && Track.Source.ScreenShareAudio !== undefined
+              ? Track.Source.ScreenShareAudio
+              : Track && Track.Source
+                ? Track.Source.ScreenShare
+                : undefined
+            : Track && Track.Source
+              ? Track.Source.Microphone
+              : undefined,
+      cleanup: function () {
+        try {
+          mixedTrack.stop();
+        } catch (e) {}
+        nodes.forEach(function (item) {
+          try {
+            item.src.disconnect();
+            item.gain.disconnect();
+          } catch (e) {}
+        });
+        ctx.close().catch(function () {});
+      },
     });
   }
 
@@ -73,6 +369,10 @@
       var videoEl = opts.videoEl;
       var url = opts.url;
       var token = opts.token;
+      var connectOpts = {};
+      var rtcConfig = _buildRtcConfig(opts);
+      if (rtcConfig) connectOpts.rtcConfig = rtcConfig;
+      if (opts.peerConnectionTimeout) connectOpts.peerConnectionTimeout = opts.peerConnectionTimeout;
       var firstVideo = false;
 
       function attachIfRemote(track, participant, publication) {
@@ -127,7 +427,7 @@
       });
 
       _log('viewer', 'connecting…', url);
-      return room.connect(url, token).then(function () {
+      return room.connect(url, token, connectOpts).then(function () {
         _log('viewer', 'connected OK, remote participants:', room.remoteParticipants.size);
         room.remoteParticipants.forEach(function (p) {
           p.trackPublications.forEach(function (pub) {
@@ -149,9 +449,16 @@
       var Track = L.Track;
       var room = new Room({ disconnectOnPageLeave: true });
       _wireRoomDebug(room, 'host');
+      room.on(L.RoomEvent.Disconnected, function () {
+        _closeHostResources(room);
+      });
+      var connectOpts = {};
+      var rtcConfig = _buildRtcConfig(opts);
+      if (rtcConfig) connectOpts.rtcConfig = rtcConfig;
+      if (opts.peerConnectionTimeout) connectOpts.peerConnectionTimeout = opts.peerConnectionTimeout;
 
       _log('host', 'connecting…', opts.url);
-      return room.connect(opts.url, opts.token).then(function () {
+      return room.connect(opts.url, opts.token, connectOpts).then(function () {
         _log('host', 'connected OK, publishing tracks…');
         var pubOpts = { name: 'program', simulcast: true };
         if (Track && Track.Source) {
@@ -173,24 +480,15 @@
         }
         return chain
           .then(function () {
-            if (opts.audioPageTrack || opts.audioMicTrack) {
-              var pageSrc =
-                Track && Track.Source && Track.Source.ScreenShareAudio !== undefined
-                  ? Track.Source.ScreenShareAudio
-                  : Track && Track.Source ? Track.Source.ScreenShare : undefined;
-              return publishAudio(opts.audioPageTrack, 'page', pageSrc).then(function () {
-                return publishAudio(
-                  opts.audioMicTrack, 'mic',
-                  Track && Track.Source ? Track.Source.Microphone : undefined
-                );
-              });
-            }
-            if (opts.audioTrack && opts.audioTrack.readyState === 'live') {
-              return publishAudio(
-                opts.audioTrack, 'audio',
-                Track && Track.Source ? Track.Source.Microphone : undefined
-              );
-            }
+            return _buildMixedAudio(opts, Track).then(function (mixed) {
+              if (!mixed || !mixed.track || mixed.track.readyState !== 'live') {
+                _log('host', 'no live audio track available to publish');
+                return;
+              }
+              room.__uskingCleanup = mixed.cleanup;
+              _log('host', 'publishing mixed audio track', mixed.name);
+              return publishAudio(mixed.track, mixed.name, mixed.source);
+            });
           })
           .then(function () {
             _log('host', 'all tracks published');
@@ -202,6 +500,7 @@
 
   function disconnect(room) {
     if (room && typeof room.disconnect === 'function') {
+      _closeHostResources(room);
       try { room.disconnect(); } catch (e) {}
     }
   }

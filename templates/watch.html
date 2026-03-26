@@ -452,6 +452,8 @@ async function _startWatchWebRTC() {
     _watchLiveKitRoom = await USKingLiveKit.viewerConnect({
       url: lk.ws_url,
       token: lk.token,
+      iceServers: sess.ice_servers || (sess.livekit && sess.livekit.ice_servers) || [],
+      peerConnectionTimeout: 25000,
       videoEl: v,
       onAudioTrack: function (track, publication, participant, audioEl) {
         _registerWatchLiveKitAudio(track, publication, participant, audioEl);

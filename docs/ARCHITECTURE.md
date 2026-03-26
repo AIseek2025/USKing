@@ -58,7 +58,7 @@
 
 ## 技术选型（建议）
 
-- **站内实时**：WebRTC SFU（优先 LiveKit）
+- **站内实时**：WebRTC SFU（优先 LiveKit）；跨网连通依赖 **独立 coturn**，由业务 API 下发标准 `ice_servers`（见 `infra/turn/README.md`）
 - **采集**：Windows（Graphics Capture / WASAPI）、macOS（ScreenCaptureKit / AVFoundation）；浏览器版用 `getDisplayMedia` / `getUserMedia`
 - **合成与编码**：浏览器 `canvas.captureStream()` 做 MVP；正式 egress 由 FFmpeg / LiveKit Egress 承担
 - **推流**：RTMP 为主（YouTube/TikTok/Twitch/Bilibili 等均支持）；自建平台回放与公播走 HLS

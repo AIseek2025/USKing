@@ -1,0 +1,10 @@
+# 可选：用容器跑 coturn。生产更常见为 apt 安装 + systemd。
+# 当前示例默认走 UDP TURN(3478)；若启用 TURNS，再额外挂载证书并放通对应端口。
+services:
+  coturn:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command: ["-c", "/etc/coturn/turnserver.conf"]
