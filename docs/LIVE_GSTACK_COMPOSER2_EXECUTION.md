@@ -19,8 +19,8 @@
 - 当前 `legacy_jpeg`：只保留为 `fallback / 诊断通道`
 
 权威架构基线：
-- [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_ARCHITECTURE_UPGRADE.md)
-- [`docs/LIVE_ROLLOUT_PHASES.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_ROLLOUT_PHASES.md)
+- [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](./LIVE_ARCHITECTURE_UPGRADE.md)
+- [`docs/LIVE_ROLLOUT_PHASES.md`](./LIVE_ROLLOUT_PHASES.md)
 
 ### 1.2 gstack 如何嵌入 USKing
 gstack 植入 USKing 的方式是：
@@ -155,7 +155,7 @@ flowchart TD
 ```
 
 阶段权威来源：
-- [`docs/LIVE_ROLLOUT_PHASES.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_ROLLOUT_PHASES.md)
+- [`docs/LIVE_ROLLOUT_PHASES.md`](./LIVE_ROLLOUT_PHASES.md)
 
 ---
 
@@ -286,8 +286,8 @@ flowchart TD
 把旧链路降级为 fallback，不再把它当主架构继续扩展。
 
 ### 权威边界
-- [`server/live_broadcast.py`](/Users/surferboy/.openclaw/workspace/USKing/server/live_broadcast.py)
-- [`app/live.html`](/Users/surferboy/.openclaw/workspace/USKing/app/live.html)
+- [`server/live_broadcast.py`](../server/live_broadcast.py)
+- [`app/live.html`](../app/live.html)
 
 ### 允许的动作
 - 补注释
@@ -307,10 +307,10 @@ flowchart TD
 完成业务层与媒体层解耦。
 
 ### 主要边界
-- [`server/live_media.py`](/Users/surferboy/.openclaw/workspace/USKing/server/live_media.py)
-- [`server/api.py`](/Users/surferboy/.openclaw/workspace/USKing/server/api.py)
-- [`server/config.py`](/Users/surferboy/.openclaw/workspace/USKing/server/config.py)
-- [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_ARCHITECTURE_UPGRADE.md)
+- [`server/live_media.py`](../server/live_media.py)
+- [`server/api.py`](../server/api.py)
+- [`server/config.py`](../server/config.py)
+- [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](./LIVE_ARCHITECTURE_UPGRADE.md)
 
 ### 必须产出
 - 统一媒体配置接口
@@ -398,28 +398,28 @@ flowchart TD
 ## 9. 文件边界与冻结区
 
 ## 9.1 业务面优先允许编辑区
-- [`server/api.py`](/Users/surferboy/.openclaw/workspace/USKing/server/api.py)
-- [`server/live_media.py`](/Users/surferboy/.openclaw/workspace/USKing/server/live_media.py)
-- [`server/config.py`](/Users/surferboy/.openclaw/workspace/USKing/server/config.py)
-- [`templates/watch.html`](/Users/surferboy/.openclaw/workspace/USKing/templates/watch.html)
-- [`templates/index.html`](/Users/surferboy/.openclaw/workspace/USKing/templates/index.html)
-- [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_ARCHITECTURE_UPGRADE.md)
-- [`docs/LIVE_ROLLOUT_PHASES.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_ROLLOUT_PHASES.md)
+- [`server/api.py`](../server/api.py)
+- [`server/live_media.py`](../server/live_media.py)
+- [`server/config.py`](../server/config.py)
+- [`templates/watch.html`](../templates/watch.html)
+- [`templates/index.html`](../templates/index.html)
+- [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](./LIVE_ARCHITECTURE_UPGRADE.md)
+- [`docs/LIVE_ROLLOUT_PHASES.md`](./LIVE_ROLLOUT_PHASES.md)
 
 ## 9.2 fallback 冻结区
 这些文件默认只能做两类修改：`兼容修复` 或 `回滚保障`。
 
-- [`server/live_broadcast.py`](/Users/surferboy/.openclaw/workspace/USKing/server/live_broadcast.py)
-- [`app/live.html`](/Users/surferboy/.openclaw/workspace/USKing/app/live.html)
+- [`server/live_broadcast.py`](../server/live_broadcast.py)
+- [`app/live.html`](../app/live.html)
 
 禁止把新的主能力继续堆到这里。
 
 ## 9.3 媒体平面扩展区
-- [`services/realtime-signaling/README.md`](/Users/surferboy/.openclaw/workspace/USKing/services/realtime-signaling/README.md)
-- [`services/media-egress/README.md`](/Users/surferboy/.openclaw/workspace/USKing/services/media-egress/README.md)
-- [`infra/turn/README.md`](/Users/surferboy/.openclaw/workspace/USKing/infra/turn/README.md)
-- [`infra/redis/README.md`](/Users/surferboy/.openclaw/workspace/USKing/infra/redis/README.md)
-- [`infra/postgres/README.md`](/Users/surferboy/.openclaw/workspace/USKing/infra/postgres/README.md)
+- [`services/realtime-signaling/README.md`](../services/realtime-signaling/README.md)
+- [`services/media-egress/README.md`](../services/media-egress/README.md)
+- [`infra/turn/README.md`](../infra/turn/README.md)
+- [`infra/redis/README.md`](../infra/redis/README.md)
+- [`infra/postgres/README.md`](../infra/postgres/README.md)
 
 ---
 
@@ -482,16 +482,16 @@ flowchart TD
 
 每个阶段完成后，必须检查这些文档是否要同步：
 
-- [`README.md`](/Users/surferboy/.openclaw/workspace/USKing/README.md)
-- [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_ARCHITECTURE_UPGRADE.md)
-- [`docs/LIVE_ROLLOUT_PHASES.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_ROLLOUT_PHASES.md)
-- [`docs/DEPLOY.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/DEPLOY.md)
-- [`services/realtime-signaling/README.md`](/Users/surferboy/.openclaw/workspace/USKing/services/realtime-signaling/README.md)
-- [`services/media-egress/README.md`](/Users/surferboy/.openclaw/workspace/USKing/services/media-egress/README.md)
-- [`infra/postgres/README.md`](/Users/surferboy/.openclaw/workspace/USKing/infra/postgres/README.md)
-- [`infra/redis/README.md`](/Users/surferboy/.openclaw/workspace/USKing/infra/redis/README.md)
-- [`infra/turn/README.md`](/Users/surferboy/.openclaw/workspace/USKing/infra/turn/README.md)
-- [`docs/LIVE_GSTACK_WORK_RECORD.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_GSTACK_WORK_RECORD.md)（阶段复盘、可审计证据索引时更新）
+- [`README.md`](../README.md)
+- [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](./LIVE_ARCHITECTURE_UPGRADE.md)
+- [`docs/LIVE_ROLLOUT_PHASES.md`](./LIVE_ROLLOUT_PHASES.md)
+- [`docs/DEPLOY.md`](./DEPLOY.md)
+- [`services/realtime-signaling/README.md`](../services/realtime-signaling/README.md)
+- [`services/media-egress/README.md`](../services/media-egress/README.md)
+- [`infra/postgres/README.md`](../infra/postgres/README.md)
+- [`infra/redis/README.md`](../infra/redis/README.md)
+- [`infra/turn/README.md`](../infra/turn/README.md)
+- [`docs/LIVE_GSTACK_WORK_RECORD.md`](./LIVE_GSTACK_WORK_RECORD.md)（阶段复盘、可审计证据索引时更新）
 
 没有文档同步，不算阶段完成。
 
@@ -516,8 +516,8 @@ flowchart TD
 如果你是 `composer 2`，请按以下理解执行：
 
 1. 你必须把 gstack 当作 **开发治理框架**
-2. 你必须把 [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_ARCHITECTURE_UPGRADE.md) 当作架构基线
-3. 你必须把 [`docs/LIVE_ROLLOUT_PHASES.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_ROLLOUT_PHASES.md) 当作阶段权威来源
+2. 你必须把 [`docs/LIVE_ARCHITECTURE_UPGRADE.md`](./LIVE_ARCHITECTURE_UPGRADE.md) 当作架构基线
+3. 你必须把 [`docs/LIVE_ROLLOUT_PHASES.md`](./LIVE_ROLLOUT_PHASES.md) 当作阶段权威来源
 4. 你必须逐阶段推进，不允许跨阶段一次性重写
 5. 你必须在每一阶段都完成：
    - Plan
@@ -533,4 +533,4 @@ flowchart TD
 
 ## 15. 工作记录与审计留底
 
-每完成一个里程碑或 Phase，应在 [`docs/LIVE_GSTACK_WORK_RECORD.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_GSTACK_WORK_RECORD.md) 中补充：阶段范围、仓库证据（PR/提交/关键文件）、测试与 staging 结论、Reflect 要点，便于对照 gstack 全链路复核。
+每完成一个里程碑或 Phase，应在 [`docs/LIVE_GSTACK_WORK_RECORD.md`](./LIVE_GSTACK_WORK_RECORD.md) 中补充：阶段范围、仓库证据（PR/提交/关键文件）、测试与 staging 结论、Reflect 要点，便于对照 gstack 全链路复核。

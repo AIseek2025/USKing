@@ -76,6 +76,6 @@
 - 当切换到 `livekit` 时，业务层继续复用当前直播权限和房间元数据，只替换媒体链路。
 
 ## 执行手册
-- 详细执行规则：[`docs/LIVE_GSTACK_COMPOSER2_EXECUTION.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_GSTACK_COMPOSER2_EXECUTION.md)
-- 执行摘要：[`docs/LIVE_GSTACK_COMPOSER2_QUICKSTART.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_GSTACK_COMPOSER2_QUICKSTART.md)
-- 工作记录与审计留底：[`docs/LIVE_GSTACK_WORK_RECORD.md`](/Users/surferboy/.openclaw/workspace/USKing/docs/LIVE_GSTACK_WORK_RECORD.md)
+- 详细执行规则：[`docs/LIVE_GSTACK_COMPOSER2_EXECUTION.md`](./LIVE_GSTACK_COMPOSER2_EXECUTION.md)
+- 执行摘要：[`docs/LIVE_GSTACK_COMPOSER2_QUICKSTART.md`](./LIVE_GSTACK_COMPOSER2_QUICKSTART.md)
+- 工作记录与审计留底：[`docs/LIVE_GSTACK_WORK_RECORD.md`](./LIVE_GSTACK_WORK_RECORD.md)

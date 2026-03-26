@@ -36,6 +36,12 @@ static/uploads/*
 tmp/
 .cache/
 
+# Local deploy / access helpers (do not commit)
+*.exp
+*.tar.gz
+deploy-*/
+test_ssh.py
+
 # Test / coverage
 .pytest_cache/
 .coverage

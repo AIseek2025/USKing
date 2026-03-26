@@ -26,6 +26,7 @@
 ### 1.3 交叉引用方式
 
 - 在新文档中**显式链接**到既有文档路径，例如：「详见 [LIVE_ARCHITECTURE_UPGRADE.md](./LIVE_ARCHITECTURE_UPGRADE.md)」。  
+- 仓库内链接统一使用 **仓库相对路径**，**不要**写本机绝对路径（如 `/Users/...`），以保证远端可点击与可协作。  
 - 若某专题已有多份文档，在新文档开头写 **「文档地图」** 小节，列出阅读顺序。
 
 ### 1.4 与本手册的关系
@@ -132,6 +133,7 @@ uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 | [REQUIREMENTS.md](./REQUIREMENTS.md) | 业务需求与术语 |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 架构设想与模块 |
 | [DEPLOY.md](./DEPLOY.md) | 生产部署清单 |
+| [DEPLOY_ASSETS_REVIEW.md](./DEPLOY_ASSETS_REVIEW.md) | 本地部署脚本/快照是否值得入库的审计结论 |
 | [LIVE_ARCHITECTURE_UPGRADE.md](./LIVE_ARCHITECTURE_UPGRADE.md) | 直播升级总览 |
 | [LIVE_ROLLOUT_PHASES.md](./LIVE_ROLLOUT_PHASES.md) | 分阶段上线 |
 | [LIVE_PHASE3_EGRESS.md](./LIVE_PHASE3_EGRESS.md) | Phase 3 egress 纲要 |
@@ -139,6 +141,7 @@ uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 | [LIVE_GSTACK_COMPOSER2_QUICKSTART.md](./LIVE_GSTACK_COMPOSER2_QUICKSTART.md) | Composer2 快速上手 |
 | [LIVE_GSTACK_COMPOSER2_EXECUTION.md](./LIVE_GSTACK_COMPOSER2_EXECUTION.md) | Composer2 执行细则 |
 | [LIVE_GSTACK_WORK_RECORD.md](./LIVE_GSTACK_WORK_RECORD.md) | 可审计工作记录 |
+| [COMPOSER_PUSH_BOUNDARY.md](./COMPOSER_PUSH_BOUNDARY.md) | 哪些产物应该推送的边界清单 |
 | [REFERENCES.md](./REFERENCES.md) | 外部参考 |
 
 ---
@@ -149,6 +152,7 @@ uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 - **前端**：大段内联脚本在 `templates/` / `app/` 中已与现有模式一致，改动时保持与 `live.html` / Dashboard 行为对齐。  
 - **安全**：勿提交真实密钥、`.env` 副本；生产变量见 `docs/DEPLOY.md`。  
 - **Git**：大仓库推送问题见根目录 `README.md` 中 `http.postBuffer` 说明。
+- **推送边界**：提交前先对照 [`docs/COMPOSER_PUSH_BOUNDARY.md`](./COMPOSER_PUSH_BOUNDARY.md) 判断哪些文件该推、哪些应留本地。
 
 ---
 
