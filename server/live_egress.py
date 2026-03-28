@@ -298,9 +298,13 @@ def validate_livekit_webhook(raw_body: bytes, auth_header: str) -> dict[str, Any
     claims = jwt.decode(token, LIVEKIT_API_SECRET, algorithms=["HS256"], options={"verify_aud": False})
     if claims.get("iss") != LIVEKIT_API_KEY:
         raise ValueError("invalid webhook issuer")
-    expected = claims.get("sha256")
-    actual = base64.b64encode(hashlib.sha256(raw_body).digest()).decode("ascii")
-    if expected not in {actual, actual.rstrip("=")}:
+    encoded_hash = str(claims.get("sha256") or "").strip()
+    if not encoded_hash:
+        raise ValueError("missing webhook body hash")
+    padded_hash = encoded_hash + ("=" * (-len(encoded_hash) % 4))
+    expected = base64.b64decode(padded_hash)
+    actual = hashlib.sha256(raw_body).digest()
+    if expected != actual:
         raise ValueError("invalid webhook body hash")
     payload = json.loads(raw_body.decode("utf-8"))
     return payload if isinstance(payload, dict) else {}
