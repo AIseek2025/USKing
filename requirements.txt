@@ -13,3 +13,5 @@ pandas>=2.0
 yfinance>=0.2.40
 pyfredapi>=0.10.0
 feedparser>=6.0
+psycopg[binary]
+redis

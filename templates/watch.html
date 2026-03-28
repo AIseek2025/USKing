@@ -15,7 +15,10 @@ let _chatPollTimer = null;
 let _chatSinceId = 0;
 let _watchAudioViewer = null;
 let _watchLiveKitRoom = null;
+let _watchHlsHandle = null;
 let _watchMedia = {};
+let _watchSessionToken = '';
+let _watchBootAt = 0;
 let _watchLiveKitAudioUnlocked = false;
 let _watchLiveKitAudioState = { page: 0, mic: 0, other: 0 };
 let _watchUnlockCleanup = null;
@@ -43,6 +46,24 @@ function _stopWatchLiveKit() {
   if (_watchUnlockCleanup) {
     _watchUnlockCleanup();
     _watchUnlockCleanup = null;
+  }
+}
+
+function _stopWatchHls() {
+  if (_watchHlsHandle && typeof _watchHlsHandle.destroy === 'function') {
+    try {
+      _watchHlsHandle.destroy();
+    } catch (e) {}
+  }
+  _watchHlsHandle = null;
+  const v = document.getElementById('watchLiveHls');
+  if (v) {
+    try {
+      v.pause();
+      v.removeAttribute('src');
+      v.load();
+    } catch (e) {}
+    v.style.display = 'none';
   }
 }
 
@@ -175,6 +196,7 @@ async function _unlockWatchLiveKitAudio() {
     )
   );
   _applyWatchLiveKitAudioPrefs();
+  _reportWatchQoE('first_audio_ms', { metric_value: Date.now() - (_watchBootAt || Date.now()), metric_unit: 'ms' });
 }
 
 function _registerWatchLiveKitAudio(track, publication, participant, audioEl) {
@@ -232,6 +254,7 @@ function _startWatchAudio() {
       if (!_watchAudioViewer) return;
       _watchAudioViewer.unlock().then(function () {
         btn.style.display = 'none';
+        _reportWatchQoE('first_audio_ms', { metric_value: Date.now() - (_watchBootAt || Date.now()), metric_unit: 'ms' });
       });
     };
   }
@@ -240,9 +263,50 @@ function _startWatchAudio() {
     return _watchAudioViewer.unlock().then(function () {
       const btn = document.getElementById('watchAudioUnlock');
       if (btn) btn.style.display = 'none';
+      _reportWatchQoE('first_audio_ms', { metric_value: Date.now() - (_watchBootAt || Date.now()), metric_unit: 'ms' });
     });
   });
   _setWatchAudioHint(I18N.t('watch.audio_hint_bar'));
+}
+
+function _selectedPlaneProvider(sess) {
+  const delivery = (sess && sess.delivery) || {};
+  const plane = delivery.selected_plane || 'fallback';
+  const planes = (sess && sess.planes) || {};
+  return ((planes[plane] || {}).provider) || plane;
+}
+
+function _reportWatchQoE(eventName, data) {
+  const body = Object.assign(
+    {
+      session_token: _watchSessionToken || '',
+      event_name: eventName,
+      plane: (((_watchMedia || {}).delivery) || {}).selected_plane || '',
+      provider: _selectedPlaneProvider(_watchMedia),
+      region: (((_watchMedia || {}).edge) || {}).region || '',
+      country: (((_watchMedia || {}).edge) || {}).country || '',
+      ok: true,
+    },
+    data || {}
+  );
+  APP.api('POST', '/api/live/qoe-event/' + encodeURIComponent(streamer), body).catch(() => {});
+}
+
+function _closeWatchPlaybackSession() {
+  if (!_watchSessionToken) return;
+  try {
+    navigator.sendBeacon(
+      '/api/live/playback-session/close',
+      new Blob([JSON.stringify({ session_token: _watchSessionToken })], { type: 'application/json' })
+    );
+  } catch (e) {
+    fetch('/api/live/playback-session/close', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_token: _watchSessionToken }),
+      keepalive: true,
+    }).catch(() => {});
+  }
 }
 
 function _escapeHtml(s) {
@@ -429,6 +493,7 @@ function _initWatchChatUI() {
 async function _startWatchWebRTC(opts) {
   opts = opts || {};
   _stopWatchLiveKit();
+  _stopWatchHls();
   if (!opts.disableAudioPlayback) _initWatchLiveKitAudioUI();
   if (typeof USKingLiveKit === 'undefined') {
     if (_watchMedia.fallback_enabled !== false && _watchMedia.playback_mode !== 'hls') {
@@ -446,8 +511,7 @@ async function _startWatchWebRTC(opts) {
     v.muted = true;
   }
   try {
-    const r = await APP.api('GET', '/api/live/media/viewer-session/' + encodeURIComponent(streamer));
-    const sess = r.session || {};
+    const sess = opts.session || {};
     const lk = sess.livekit;
     if (!lk || !lk.token || !lk.ws_url) throw new Error('no livekit session');
     _watchLiveKitRoom = await USKingLiveKit.viewerConnect({
@@ -469,9 +533,14 @@ async function _startWatchWebRTC(opts) {
           },
       onFirstFrame: function () {
         if (wait) wait.style.display = 'none';
+        _reportWatchQoE('first_frame_ms', {
+          metric_value: Date.now() - (opts.startedAt || Date.now()),
+          metric_unit: 'ms',
+        });
       },
       onDisconnected: function () {
         if (wait) wait.style.display = '';
+        _reportWatchQoE('viewer_disconnected', { ok: false });
       },
     });
     if (v) {
@@ -496,6 +565,41 @@ async function _startWatchWebRTC(opts) {
     }
   }
   return null;
+}
+
+async function _startWatchHls(sess, startedAt) {
+  _stopWatchLiveKit();
+  _stopWatchAudio();
+  _stopWatchHls();
+  const img = document.getElementById('livePollImg');
+  const rtc = document.getElementById('watchLiveRtc');
+  const hls = document.getElementById('watchLiveHls');
+  const wait = document.getElementById('liveWsWait');
+  if (!hls) return null;
+  if (img) img.style.display = 'none';
+  if (rtc) rtc.style.display = 'none';
+  hls.style.display = '';
+  const url =
+    (((sess || {}).planes || {}).broadcast || {}).manifest_url ||
+    (sess && sess.hls_manifest_url) ||
+    '';
+  if (!url || typeof USKingHls === 'undefined') {
+    throw new Error('no hls session');
+  }
+  _watchHlsHandle = await USKingHls.attach({ videoEl: hls, url: url });
+  hls.addEventListener(
+    'loadeddata',
+    function () {
+      if (wait) wait.style.display = 'none';
+      _reportWatchQoE('first_frame_ms', {
+        metric_value: Date.now() - (startedAt || Date.now()),
+        metric_unit: 'ms',
+      });
+    },
+    { once: true }
+  );
+  hls.play().catch(() => {});
+  return _watchHlsHandle;
 }
 
 async function _sendWatchChat() {
@@ -526,18 +630,24 @@ async function loadWatch() {
   const r = await APP.api('GET', `/api/live/user/${encodeURIComponent(streamer)}`);
   const u = r.user;
   const s = r.stream;
-  const media = r.media || {};
+  const vr = s && s.is_live
+    ? await APP.api('GET', `/api/live/media/viewer-session/${encodeURIComponent(streamer)}`)
+    : { session: r.media || {} };
+  const media = (vr && vr.session) || r.media || {};
   _watchMedia = media;
+  _watchSessionToken = media.session_token || '';
   const mediaBackend = media.backend || 'legacy_jpeg';
-  const playbackMode = media.playback_mode || 'legacy_jpeg';
+  const delivery = media.delivery || {};
+  const selectedPlane = delivery.selected_plane || 'fallback';
+  const selectedPlaneMeta = ((media.planes || {})[selectedPlane]) || {};
+  const playbackMode = selectedPlaneMeta.mode || media.playback_mode || 'legacy_jpeg';
   const lkReady = !!(media.livekit && media.livekit.ready);
-  const useWebRTC =
-    mediaBackend === 'livekit' && playbackMode === 'webrtc' && lkReady;
-  const useLegacyPreview =
-    !useWebRTC &&
-    (playbackMode === 'legacy_jpeg' ||
-      (media.fallback_enabled !== false && playbackMode !== 'hls'));
+  const useWebRTC = selectedPlane === 'interactive' && playbackMode === 'webrtc' && lkReady;
+  const useBroadcast = selectedPlane === 'broadcast' && playbackMode === 'hls';
+  const useLegacyPreview = selectedPlane === 'fallback';
   const noServerFrame = !!(s && s.is_live && r.has_live_frame_buffer === false);
+  const watchBootAt = Date.now();
+  _watchBootAt = watchBootAt;
   const el = document.getElementById('watchContent');
   const av = u.avatar_url
     ? `<img src="${u.avatar_url}" style="width:100%;height:100%;object-fit:cover">`
@@ -552,7 +662,9 @@ async function loadWatch() {
       _stopLivePoll();
       _stopWatchChat();
       _stopWatchLiveKit();
+      _stopWatchHls();
       _stopWatchAudio();
+      _closeWatchPlaybackSession();
     });
     el.innerHTML = `
       <div class="watch-layout">
@@ -576,12 +688,14 @@ async function loadWatch() {
             </div>
             <img id="livePollImg" class="watch-video-img" alt="" />
             <video id="watchLiveRtc" class="watch-video-img" playsinline autoplay muted style="display:none"></video>
+            <video id="watchLiveHls" class="watch-video-img" playsinline autoplay controls style="display:none"></video>
             <div id="liveWsWait" class="watch-wait-overlay">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               <p style="font-size:14px;margin-top:10px;color:var(--text2);font-weight:600">${I18N.t('watch.connecting')}</p>
               <p style="font-size:12px;margin-top:8px;line-height:1.55;color:var(--text3)">${noServerFrame ? I18N.t('watch.no_server_frame') : I18N.t('watch.wait_capture')}</p>
               <p style="font-size:11px;margin-top:8px;color:var(--text3)">${I18N.t('watch.media_backend')}：<strong>${_escapeHtml(mediaBackend)}</strong> · ${I18N.t('watch.playback_mode')}：<strong>${_escapeHtml(I18N.t('watch.mode_' + playbackMode) || playbackMode)}</strong></p>
-              ${playbackMode !== 'legacy_jpeg' ? `<p style="font-size:11px;margin-top:6px;color:var(--text3)">${I18N.t('watch.mode_note_fallback')}</p>` : ''}
+              <p style="font-size:11px;margin-top:6px;color:var(--text3)">Plane：<strong>${_escapeHtml(selectedPlane)}</strong> · Provider：<strong>${_escapeHtml(selectedPlaneMeta.provider || mediaBackend)}</strong></p>
+              ${selectedPlane !== 'fallback' ? `<p style="font-size:11px;margin-top:6px;color:var(--text3)">${I18N.t('watch.mode_note_fallback')}</p>` : ''}
               <p style="font-size:11px;margin-top:8px;color:var(--text3)">${typeof I18N !== 'undefined' && I18N.lang === 'en' ? 'Room' : '当前房间'}：<strong>@${_escapeHtml(u.username)}</strong></p>
             </div>
           </div>
@@ -608,18 +722,30 @@ async function loadWatch() {
     _initWatchFit();
     _initWatchChatUI();
     _startWatchChat();
+    const audioBar = document.getElementById('watchAudioBar');
+    if (audioBar) audioBar.style.display = useBroadcast ? 'none' : '';
     if (useWebRTC) {
-      /* 画面走 LiveKit，声音继续走站内双路音频，规避不同浏览器的 WebRTC 音频自动播放/解锁差异。 */
-      _startWatchWebRTC({ disableAudioPlayback: true });
-      _startWatchAudio();
+      _startWatchWebRTC({ session: media, startedAt: watchBootAt, disableAudioPlayback: false });
+    } else if (useBroadcast) {
+      _startWatchHls(media, watchBootAt).catch(() => {
+        _reportWatchQoE('hls_start_failed', { ok: false });
+        if (media.fallback_enabled !== false) {
+          _startLivePoll();
+          _startWatchAudio();
+        }
+      });
     } else {
       if (useLegacyPreview) _startLivePoll();
       _startWatchAudio();
     }
+    _reportWatchQoE('session_selected', {
+      detail: { plane: selectedPlane, provider: selectedPlaneMeta.provider || mediaBackend },
+    });
   } else {
     _stopLivePoll();
     _stopWatchChat();
     _stopWatchLiveKit();
+    _stopWatchHls();
     _stopWatchAudio();
     el.innerHTML = `<div class="card watch-offline-card">
       <div style="display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:20px">

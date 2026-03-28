@@ -1347,7 +1347,7 @@ async function dashEnsureRealtimeTransport(opts){
     if((opts.warnOnMissingPageAudio!==false)&&dashMissingPageAudioRequested(pageAudTrack))alert(_t('dash.page_audio_missing'));
     try{
       var cfg=await APP.api('GET','/api/live/media/config');
-      var wantLk=cfg.backend==='livekit'&&cfg.livekit&&cfg.livekit.ready&&(cfg.publish_mode==='webrtc'||cfg.publish_mode==='livekit');
+      var wantLk=cfg.planes&&cfg.planes.interactive&&cfg.planes.interactive.enabled&&cfg.livekit&&cfg.livekit.ready&&(cfg.publish_mode==='webrtc'||cfg.publish_mode==='livekit');
       if(!(wantLk&&typeof USKingLiveKit!=='undefined'))return false;
       var hs=await APP.api('POST','/api/live/media/host-session');
       var lk=hs.session&&hs.session.livekit;
@@ -1363,11 +1363,6 @@ async function dashEnsureRealtimeTransport(opts){
         peerConnectionTimeout:25000
       });
       dashStopFramePushToSite();
-      if(typeof USKingLiveAudio!=='undefined'){
-        if(_dLiveAudioPub){_dLiveAudioPub.stop();_dLiveAudioPub=null;}
-        _dLiveAudioPub=new USKingLiveAudio.Publisher((APP.token)||'');
-        _dLiveAudioPub.start(pageAud,_dMicStream);
-      }
       dashStartPreviewFramePushToSite();
       if(err)err.style.display='none';
       return true;

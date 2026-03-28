@@ -13,10 +13,42 @@ services:
       - .env
     environment:
       DEV_MODE: "false"
-      DATABASE_URL: sqlite:////data/meiguwang.db
+      DATABASE_URL: postgresql+psycopg://usking:${POSTGRES_PASSWORD:-change-me}@postgres:5432/usking
       UPLOAD_DIR: /data/uploads
+      REDIS_URL: redis://redis:6379/0
+      LIVE_VENDOR_STACK: ${LIVE_VENDOR_STACK:-livekit_cloud_mux}
+      LIVE_INTERACTIVE_VENDOR: ${LIVE_INTERACTIVE_VENDOR:-livekit_cloud}
+      LIVE_BROADCAST_VENDOR: ${LIVE_BROADCAST_VENDOR:-global_hls_cdn}
+      LIVE_RECORDING_VENDOR: ${LIVE_RECORDING_VENDOR:-mux}
+      LIVE_MEDIA_BACKEND: ${LIVE_MEDIA_BACKEND:-livekit}
+      LIVE_PUBLISH_MODE: ${LIVE_PUBLISH_MODE:-webrtc}
+      LIVE_PLAYBACK_MODE: ${LIVE_PLAYBACK_MODE:-webrtc}
+      LIVE_MIGRATION_MODE: ${LIVE_MIGRATION_MODE:-managed_hybrid}
+      LIVE_INTERACTIVE_ROLLOUT_PERCENT: ${LIVE_INTERACTIVE_ROLLOUT_PERCENT:-100}
     volumes:
       - usking-data:/data
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:17
+    container_name: usking-postgres
+    environment:
+      POSTGRES_DB: usking
+      POSTGRES_USER: usking
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - usking-postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: usking-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - usking-redis-data:/data
 
 volumes:
   usking-data:
+  usking-postgres-data:
+  usking-redis-data:

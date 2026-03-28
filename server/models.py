@@ -100,6 +100,56 @@ class LiveChatMessage(Base):
     created_at = Column(DateTime, default=utcnow)
 
 
+class LiveRecordingJob(Base):
+    __tablename__ = "live_recording_jobs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stream_id = Column(Integer, ForeignKey("live_streams.id"), nullable=False, index=True)
+    host_username = Column(String(64), nullable=False, index=True)
+    provider = Column(String(64), default="")
+    room_name = Column(String(255), default="")
+    egress_type = Column(String(32), default="recording")  # recording / hls
+    status = Column(String(32), default="planned")
+    manifest_url = Column(String(1024), default="")
+    recording_url = Column(String(1024), default="")
+    detail_json = Column(Text, default="")
+    created_at = Column(DateTime, default=utcnow)
+    ended_at = Column(DateTime, nullable=True)
+
+
+class LivePlaybackSession(Base):
+    __tablename__ = "live_playback_sessions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stream_id = Column(Integer, ForeignKey("live_streams.id"), nullable=True, index=True)
+    host_username = Column(String(64), nullable=False, index=True)
+    viewer_id = Column(String(16), default="", index=True)
+    session_token = Column(String(64), unique=True, nullable=False, index=True)
+    plane = Column(String(32), default="")
+    provider = Column(String(64), default="")
+    region = Column(String(32), default="")
+    country = Column(String(8), default="")
+    created_at = Column(DateTime, default=utcnow)
+    closed_at = Column(DateTime, nullable=True)
+
+
+class LiveQualityEvent(Base):
+    __tablename__ = "live_quality_events"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    stream_id = Column(Integer, ForeignKey("live_streams.id"), nullable=True, index=True)
+    host_username = Column(String(64), nullable=False, index=True)
+    viewer_id = Column(String(16), default="", index=True)
+    session_token = Column(String(64), default="", index=True)
+    plane = Column(String(32), default="", index=True)
+    provider = Column(String(64), default="", index=True)
+    region = Column(String(32), default="")
+    country = Column(String(8), default="")
+    event_name = Column(String(64), nullable=False, index=True)
+    ok = Column(Boolean, default=True)
+    metric_value = Column(Float, nullable=True)
+    metric_unit = Column(String(32), default="")
+    detail_json = Column(Text, default="")
+    created_at = Column(DateTime, default=utcnow, index=True)
+
+
 class Banner(Base):
     __tablename__ = "banners"
     id = Column(Integer, primary_key=True, autoincrement=True)

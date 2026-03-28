@@ -1,4 +1,6 @@
-import os, secrets
+import json
+import os
+import secrets
 
 _DEFAULT_SECRET = "meiguwang-dev-secret-key-2026-fixed"
 SECRET_KEY = os.getenv("SECRET_KEY", _DEFAULT_SECRET)
@@ -76,6 +78,45 @@ TURN_STUN_URLS = [u.strip() for u in _turn_stun.split(",") if u.strip()]
 LIVEKIT_WS_URL = os.getenv("LIVEKIT_WS_URL", "").strip()
 LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "").strip()
 LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "").strip()
+LIVE_VENDOR_STACK = os.getenv("LIVE_VENDOR_STACK", "livekit_cloud_mux").strip().lower()
+LIVE_INTERACTIVE_VENDOR = os.getenv("LIVE_INTERACTIVE_VENDOR", "livekit_cloud").strip().lower()
+LIVE_BROADCAST_VENDOR = os.getenv("LIVE_BROADCAST_VENDOR", "global_hls_cdn").strip().lower()
+LIVE_RECORDING_VENDOR = os.getenv("LIVE_RECORDING_VENDOR", "mux").strip().lower()
+LIVE_DEFAULT_VIEWER_INTENT = os.getenv("LIVE_DEFAULT_VIEWER_INTENT", "auto").strip().lower()
+LIVE_MIGRATION_MODE = os.getenv("LIVE_MIGRATION_MODE", "managed_hybrid").strip().lower()
+LIVE_INTERACTIVE_ROLLOUT_PERCENT = max(
+    0,
+    min(100, int(os.getenv("LIVE_INTERACTIVE_ROLLOUT_PERCENT", "100") or "100")),
+)
+LIVE_INTERACTIVE_AUTHENTICATED_ONLY = os.getenv(
+    "LIVE_INTERACTIVE_AUTHENTICATED_ONLY", "false"
+).lower() in ("1", "true", "yes")
+
+
+def _csv_env(name: str) -> list[str]:
+    return [u.strip() for u in os.getenv(name, "").split(",") if u.strip()]
+
+
+def _json_env(name: str) -> dict[str, object]:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+LIVE_CANARY_USERS = _csv_env("LIVE_CANARY_USERS")
+LIVE_FORCE_INTERACTIVE_USERS = _csv_env("LIVE_FORCE_INTERACTIVE_USERS")
+LIVE_FORCE_BROADCAST_COUNTRIES = [c.upper() for c in _csv_env("LIVE_FORCE_BROADCAST_COUNTRIES")]
+LIVE_CANARY_COUNTRIES = [c.upper() for c in _csv_env("LIVE_CANARY_COUNTRIES")]
+LIVE_RTC_REGION_WS_URLS = _json_env("LIVE_RTC_REGION_WS_URLS")
+LIVE_HLS_REGION_BASE_URLS = _json_env("LIVE_HLS_REGION_BASE_URLS")
+LIVE_TURN_REGION_URLS = _json_env("LIVE_TURN_REGION_URLS")
+LIVE_REGION_HINT_MAP = _json_env("LIVE_REGION_HINT_MAP")
+REDIS_URL = os.getenv("REDIS_URL", "").strip()
 
 _BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 # 生产可挂载卷并设置 UPLOAD_DIR=/data/uploads（须为绝对路径）

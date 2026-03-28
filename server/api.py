@@ -13,6 +13,7 @@ from .models import (
     Post,
     LiveStream,
     LiveChatMessage,
+    LiveRecordingJob,
     Payment,
     Banner,
     Album,
@@ -48,11 +49,22 @@ from .live_broadcast import (
     live_memory_recent,
 )
 from .live_media import (
+    edge_region_context,
     host_session_payload,
     media_backend_summary,
+    room_name_for_username,
     stream_media_descriptor,
     viewer_session_payload,
 )
+from .live_observability import (
+    close_playback_session,
+    ensure_recording_jobs,
+    mark_recording_jobs_stopped,
+    open_playback_session,
+    record_quality_event,
+    summary_snapshot,
+)
+from .live_state import host_recent, live_state_store
 
 router = APIRouter(prefix="/api")
 router.include_router(_us_market_router)
@@ -167,6 +179,23 @@ class PostMediaUrlBody(BaseModel):
 
 class StreamUpdate(BaseModel):
     title: Optional[str] = None
+
+
+class LivePlaybackSessionClose(BaseModel):
+    session_token: str = Field(..., min_length=8, max_length=64)
+
+
+class LiveQoEEvent(BaseModel):
+    session_token: Optional[str] = Field(default="", max_length=64)
+    plane: str = Field(default="", max_length=32)
+    provider: str = Field(default="", max_length=64)
+    region: str = Field(default="", max_length=32)
+    country: str = Field(default="", max_length=8)
+    event_name: str = Field(..., min_length=1, max_length=64)
+    ok: bool = True
+    metric_value: Optional[float] = None
+    metric_unit: str = Field(default="", max_length=32)
+    detail: Optional[Dict[str, Any]] = None
 
 
 class LiveChatBody(BaseModel):
@@ -760,13 +789,17 @@ async def upload_media(file: UploadFile = File(...), user: User = Depends(requir
 
 
 @router.get("/live/media/config")
-def get_live_media_config():
+def get_live_media_config(request: Request):
     """向前端暴露当前媒体平面配置，便于选择 legacy/WebRTC/HLS 逻辑。"""
-    return media_backend_summary()
+    return media_backend_summary(request.headers)
 
 
 @router.post("/live/media/host-session")
-def get_live_host_session(user: User = Depends(require_user), db: Session = Depends(get_db)):
+def get_live_host_session(
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     stream = (
         db.query(LiveStream)
         .filter(LiveStream.user_id == user.id, LiveStream.is_live == True)
@@ -774,12 +807,32 @@ def get_live_host_session(user: User = Depends(require_user), db: Session = Depe
     )
     if not stream:
         raise HTTPException(409, "未在直播中，请先开始直播")
-    return {"session": host_session_payload(user, stream)}
+    edge = edge_region_context(request.headers)
+    session = host_session_payload(user, stream, request.headers)
+    ensure_recording_jobs(
+        db,
+        stream=stream,
+        host_username=user.username,
+        room_name=room_name_for_username(user.username),
+        provider=(session.get("egress") or {}).get("recording_provider", ""),
+        manifest_url=(session.get("egress") or {}).get("hls_manifest_url", ""),
+        enable_recording=bool((session.get("recording") or {}).get("enabled")),
+    )
+    live_state_store.mark_host_live(
+        user_id=user.id,
+        username=user.username,
+        room_name=room_name_for_username(user.username),
+        region=edge["region"],
+        transport=(session.get("publish") or {}).get("primary_plane", "interactive"),
+    )
+    return {"session": session}
 
 
 @router.get("/live/media/viewer-session/{username}")
 def get_live_viewer_session(
+    request: Request,
     username: str,
+    intent: str = Query("auto", pattern="^(auto|interactive|broadcast)$"),
     viewer: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -791,11 +844,98 @@ def get_live_viewer_session(
         .filter(LiveStream.user_id == host.id, LiveStream.is_live == True)
         .first()
     )
-    return {"session": viewer_session_payload(host, stream, viewer)}
+    session = viewer_session_payload(host, stream, viewer, request.headers, intent)
+    if stream and stream.is_live:
+        open_playback_session(
+            db,
+            stream=stream,
+            host_username=host.username,
+            viewer_id=viewer.id if viewer else "",
+            session_token=session["session_token"],
+            plane=(session.get("delivery") or {}).get("selected_plane", "fallback"),
+            provider=(
+                ((session.get("planes") or {}).get((session.get("delivery") or {}).get("selected_plane", ""), {}) or {})
+                .get("provider", "")
+            ),
+            region=(session.get("edge") or {}).get("region", ""),
+            country=(session.get("edge") or {}).get("country", ""),
+        )
+    return {"session": session}
+
+
+@router.post("/live/playback-session/close")
+def close_live_playback_session(req: LivePlaybackSessionClose, db: Session = Depends(get_db)):
+    return {"ok": close_playback_session(db, session_token=req.session_token)}
+
+
+@router.post("/live/qoe-event/{username}")
+def live_qoe_event(
+    username: str,
+    req: LiveQoEEvent,
+    viewer: Optional[User] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    host = db.query(User).filter(User.username == username).first()
+    if not host:
+        raise HTTPException(404)
+    stream = (
+        db.query(LiveStream)
+        .filter(LiveStream.user_id == host.id, LiveStream.is_live == True)
+        .first()
+    )
+    detail_json = json.dumps(req.detail or {}, ensure_ascii=False)
+    event = record_quality_event(
+        db,
+        stream=stream,
+        host_username=host.username,
+        viewer_id=viewer.id if viewer else "",
+        session_token=req.session_token or "",
+        plane=req.plane,
+        provider=req.provider,
+        region=req.region,
+        country=req.country,
+        event_name=req.event_name,
+        ok=req.ok,
+        metric_value=req.metric_value,
+        metric_unit=req.metric_unit,
+        detail_json=detail_json,
+    )
+    return {"ok": True, "event_id": event.id}
+
+
+@router.get("/live/observability/summary")
+def live_observability_summary(db: Session = Depends(get_db)):
+    active_recordings = (
+        db.query(LiveRecordingJob)
+        .filter(LiveRecordingJob.status.in_(["planned", "running", "stopped"]))
+        .order_by(LiveRecordingJob.id.desc())
+        .limit(20)
+        .all()
+    )
+    return {
+        "summary": summary_snapshot(db),
+        "recordings": [
+            {
+                "id": row.id,
+                "host_username": row.host_username,
+                "provider": row.provider,
+                "egress_type": row.egress_type,
+                "status": row.status,
+                "manifest_url": row.manifest_url,
+                "recording_url": row.recording_url,
+            }
+            for row in active_recordings
+        ],
+    }
 
 
 @router.post("/live/start")
-def start_stream(req: StreamUpdate, user: User = Depends(require_user), db: Session = Depends(get_db)):
+def start_stream(
+    req: StreamUpdate,
+    request: Request,
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
     if not user.live_enabled:
         raise HTTPException(403, "直播权限已被关闭，请联系管理员")
     stream = db.query(LiveStream).filter(LiveStream.user_id == user.id, LiveStream.is_live == True).first()
@@ -803,12 +943,48 @@ def start_stream(req: StreamUpdate, user: User = Depends(require_user), db: Sess
         stream.title = req.title or stream.title
         db.commit()
         mark_user_live(user.id)
+        session = host_session_payload(user, stream, request.headers)
+        ensure_recording_jobs(
+            db,
+            stream=stream,
+            host_username=user.username,
+            room_name=room_name_for_username(user.username),
+            provider=(session.get("egress") or {}).get("recording_provider", ""),
+            manifest_url=(session.get("egress") or {}).get("hls_manifest_url", ""),
+            enable_recording=bool((session.get("recording") or {}).get("enabled")),
+        )
+        edge = edge_region_context(request.headers)
+        live_state_store.mark_host_live(
+            user_id=user.id,
+            username=user.username,
+            room_name=room_name_for_username(user.username),
+            region=edge["region"],
+            transport="interactive",
+        )
         return {"stream": _stream_dict(stream)}
     stream = LiveStream(user_id=user.id, title=req.title or f"{user.display_name}的直播", is_live=True, started_at=utcnow())
     db.add(stream)
     db.commit()
     db.refresh(stream)
     mark_user_live(user.id)
+    edge = edge_region_context(request.headers)
+    session = host_session_payload(user, stream, request.headers)
+    ensure_recording_jobs(
+        db,
+        stream=stream,
+        host_username=user.username,
+        room_name=room_name_for_username(user.username),
+        provider=(session.get("egress") or {}).get("recording_provider", ""),
+        manifest_url=(session.get("egress") or {}).get("hls_manifest_url", ""),
+        enable_recording=bool((session.get("recording") or {}).get("enabled")),
+    )
+    live_state_store.mark_host_live(
+        user_id=user.id,
+        username=user.username,
+        room_name=room_name_for_username(user.username),
+        region=edge["region"],
+        transport="interactive",
+    )
     return {"stream": _stream_dict(stream)}
 
 
@@ -819,7 +995,9 @@ async def stop_stream(user: User = Depends(require_user), db: Session = Depends(
         stream.is_live = False
         stream.ended_at = utcnow()
         db.commit()
+        mark_recording_jobs_stopped(db, stream_id=stream.id)
     clear_user_frame(user.username, user.id)
+    live_state_store.clear_host_live(user_id=user.id)
     await disconnect_live_audio_room(user.username)
     return {"ok": True}
 
@@ -831,6 +1009,7 @@ def live_heartbeat(user: User = Depends(require_user), db: Session = Depends(get
         stream.viewer_count = max(0, stream.viewer_count)
         db.commit()
         mark_user_live(user.id)
+        live_state_store.touch_host_live(user_id=user.id)
     return {"ok": True}
 
 
@@ -854,7 +1033,7 @@ def get_active_streams(db: Session = Depends(get_db)):
             stale_ids.append(s.id)
             continue
         un = (u.username or "").strip()
-        if username_has_frame(un) or live_memory_recent(u.id):
+        if username_has_frame(un) or live_memory_recent(u.id) or host_recent(u.id):
             d = _stream_dict(s)
             d["user"] = _user_dict(u)
             result.append(d)
@@ -874,7 +1053,7 @@ def get_active_streams(db: Session = Depends(get_db)):
 
 
 @router.get("/live/user/{username}")
-def get_user_stream(username: str, db: Session = Depends(get_db)):
+def get_user_stream(username: str, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(404)
@@ -883,7 +1062,7 @@ def get_user_stream(username: str, db: Session = Depends(get_db)):
         "stream": _stream_dict(stream) if stream else None,
         "user": _user_dict(user),
         "has_live_frame_buffer": username_has_frame(username),
-        "media": stream_media_descriptor(username, stream),
+        "media": stream_media_descriptor(username, stream, request.headers),
     }
 
 

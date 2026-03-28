@@ -929,7 +929,9 @@ async function toggleLive() {
       });
       const cfg = await cfgRes.json();
       const wantLk =
-        cfg.backend === 'livekit' &&
+        cfg.planes &&
+        cfg.planes.interactive &&
+        cfg.planes.interactive.enabled &&
         cfg.livekit &&
         cfg.livekit.ready &&
         (cfg.publish_mode === 'webrtc' || cfg.publish_mode === 'livekit');
@@ -976,15 +978,6 @@ async function toggleLive() {
         liveAudioPub.start(pageAudioStream, micStream);
       }
     } else {
-      if (typeof USKingLiveAudio !== 'undefined') {
-        let audioTok = null;
-        try {
-          audioTok = localStorage.getItem('token');
-        } catch (e) {}
-        if (liveAudioPub) liveAudioPub.stop();
-        liveAudioPub = new USKingLiveAudio.Publisher(audioTok || '');
-        liveAudioPub.start(pageAudioStream, micStream);
-      }
       startPreviewFramePushToSite();
     }
 
