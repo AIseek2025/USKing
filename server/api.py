@@ -1066,8 +1066,34 @@ async def live_egress_livekit_webhook(request: Request, db: Session = Depends(ge
         payload = validate_livekit_webhook(raw, request.headers.get("authorization", ""))
     except Exception as exc:
         raise HTTPException(403, f"invalid livekit webhook: {webhook_error(exc)}")
+    event_name = str(payload.get("event", "")).strip()
+    triggered_start = False
+    if event_name == "participant_joined":
+        room = payload.get("room") or {}
+        participant = payload.get("participant") or {}
+        room_name = str((room or {}).get("name") or "").strip()
+        identity = str((participant or {}).get("identity") or "").strip()
+        host_username = room_name[len("usking-live-"):] if room_name.startswith("usking-live-") else ""
+        if host_username and identity.startswith("host:"):
+            host = db.query(User).filter(User.username == host_username).first()
+            stream = _latest_stream_for_host(db, host) if host else None
+            if host and stream and stream.is_live:
+                session = host_session_payload(host, stream)
+                try:
+                    start_livekit_egress_for_stream(
+                        db,
+                        request=None,
+                        host_username=host.username,
+                        stream=stream,
+                        room_name=room_name_for_username(host.username),
+                        manifest_url=(session.get("egress") or {}).get("hls_manifest_url", ""),
+                        enable_recording=bool((session.get("egress") or {}).get("recording_enabled")),
+                    )
+                    triggered_start = True
+                except Exception:
+                    _api_log.exception("failed to start egress from participant_joined webhook")
     jobs = apply_livekit_egress_webhook(db, payload)
-    return {"ok": True, "event": payload.get("event", ""), "jobs": jobs}
+    return {"ok": True, "event": event_name, "triggered_start": triggered_start, "jobs": jobs}
 
 
 @router.get("/live/egress/status/{username}")
