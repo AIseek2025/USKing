@@ -863,7 +863,7 @@ async function initDashboard(){
         <div style="padding:12px 14px;border-bottom:1px solid var(--bg3)">
           <h3 style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px" data-i18n="dash.encoder_h">推流设置</h3>
           <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
-            <div style="display:flex;align-items:center;justify-content:space-between"><span style="color:var(--text2)" data-i18n="dash.resolution">分辨率</span><select class="form-input" style="width:auto;padding:2px 6px;height:26px;font-size:11px"><option>1920×1080</option><option>1280×720</option></select></div>
+            <div style="display:flex;align-items:center;justify-content:space-between"><span style="color:var(--text2)" data-i18n="dash.resolution">分辨率</span><select class="form-input" id="dashResolution" style="width:auto;padding:2px 6px;height:26px;font-size:11px"><option value="1920x1080" selected>1920×1080</option><option value="1280x720">1280×720</option></select></div>
             <div style="display:flex;align-items:center;justify-content:space-between"><span style="color:var(--text2)" data-i18n="dash.framerate">帧率</span><select class="form-input" style="width:auto;padding:2px 6px;height:26px;font-size:11px"><option>30 fps</option><option>60 fps</option></select></div>
             <div style="display:flex;align-items:center;justify-content:space-between"><span style="color:var(--text2)" data-i18n="dash.bitrate">码率</span><select class="form-input" style="width:auto;padding:2px 6px;height:26px;font-size:11px"><option>4500 kbps</option><option>6000 kbps</option></select></div>
           </div>
@@ -892,6 +892,17 @@ async function initDashboard(){
       setTimeout(function(){dashEnsureRealtimeTransport({showError:false,warnOnMissingPageAudio:false});},0);
     }
   }catch{}
+  const dashRes=document.getElementById('dashResolution');
+  if(dashRes){
+    dashRes.onchange=function(){
+      dashEnsureStreamCanvas();
+      dashEnsurePreviewCanvas();
+      if(_dSources.length||(_dCamStream&&_dCamVideo)){
+        dashStopComposite();
+        dashStartComposite();
+      }
+    };
+  }
   dashRefreshI18n();
 }
 
@@ -1166,11 +1177,30 @@ function dashUpdateUI(){
   }
 }
 
+function dashGetOutputResolution(){
+  const sel=document.getElementById('dashResolution');
+  const raw=sel&&sel.value?sel.value:'1920x1080';
+  const m=String(raw).match(/^(\d+)x(\d+)$/);
+  if(!m)return{width:1920,height:1080};
+  return{width:Number(m[1])||1920,height:Number(m[2])||1080};
+}
+function dashGetStreamFrameSize(){
+  const out=dashGetOutputResolution();
+  return{width:out.width,height:out.height};
+}
+function dashGetPreviewFrameSize(){
+  const out=dashGetOutputResolution();
+  const width=Math.min(out.width,960);
+  const height=Math.round((width/out.width)*out.height);
+  return{width,height};
+}
+
 function dashStartComposite(){
   if(_dRAF)return;
   const cv=document.getElementById('dashCanvas');if(!cv)return;
   const ctx=cv.getContext('2d');
-  const W=1920,H=1080;cv.width=W;cv.height=H;
+  const out=dashGetOutputResolution();
+  const W=out.width,H=out.height;cv.width=W;cv.height=H;
   let lt=0,fc=0;
   const gap=8,pipW=Math.round(W*0.28),pipH=Math.round(H*0.32),pipX=W-pipW-gap,pipY=H-pipH-gap;
   function draw(ts){
@@ -1208,17 +1238,23 @@ function _dRR(ctx,x,y,w,h,r){ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.ar
 function _dRRF(ctx,x,y,w,h,r){ctx.beginPath();_dRR(ctx,x,y,w,h,r);ctx.fill()}
 
 function dashEnsureStreamCanvas(){
+  const size=dashGetStreamFrameSize();
   if(!_dStreamCanvas){
     _dStreamCanvas=document.createElement('canvas');
-    _dStreamCanvas.width=960;_dStreamCanvas.height=540;
     _dStreamCtx=_dStreamCanvas.getContext('2d');
+  }
+  if(_dStreamCanvas.width!==size.width||_dStreamCanvas.height!==size.height){
+    _dStreamCanvas.width=size.width;_dStreamCanvas.height=size.height;
   }
 }
 function dashEnsurePreviewCanvas(){
+  const size=dashGetPreviewFrameSize();
   if(!_dPreviewCanvas){
     _dPreviewCanvas=document.createElement('canvas');
-    _dPreviewCanvas.width=480;_dPreviewCanvas.height=270;
     _dPreviewCtx=_dPreviewCanvas.getContext('2d');
+  }
+  if(_dPreviewCanvas.width!==size.width||_dPreviewCanvas.height!==size.height){
+    _dPreviewCanvas.width=size.width;_dPreviewCanvas.height=size.height;
   }
 }
 /** 与 /app/live.html 一致：legacy fallback 仍靠 POST push-frame 收画面（SPA 后台也必须推） */
@@ -1231,7 +1267,8 @@ function dashStartFramePushToSite(){
     if(!_dSources.length&&!_dCamStream)return;
     const cv=document.getElementById('dashCanvas');
     if(!cv||!cv.width)return;
-    try{_dStreamCtx.drawImage(cv,0,0,960,540)}catch(e){return}
+    const frameSize=dashGetStreamFrameSize();
+    try{_dStreamCtx.drawImage(cv,0,0,frameSize.width,frameSize.height)}catch(e){return}
     _dStreamCanvas.toBlob((blob)=>{
       if(!blob||!_dLive)return;
       _dFramePushInFlight=true;
@@ -1244,7 +1281,7 @@ function dashStartFramePushToSite(){
         .then((res)=>{if(res.status===401)alert(_t('dash.push_login_expired'))})
         .catch(()=>{})
         .finally(()=>{_dFramePushInFlight=false});
-    },'image/jpeg',0.55);
+    },'image/jpeg',0.82);
   },150);
 }
 function dashStopFramePushToSite(){
@@ -1260,7 +1297,8 @@ function dashStartPreviewFramePushToSite(){
     if(!_dSources.length&&!_dCamStream)return;
     const cv=document.getElementById('dashCanvas');
     if(!cv||!cv.width)return;
-    try{_dPreviewCtx.drawImage(cv,0,0,480,270)}catch(e){return}
+    const frameSize=dashGetPreviewFrameSize();
+    try{_dPreviewCtx.drawImage(cv,0,0,frameSize.width,frameSize.height)}catch(e){return}
     _dPreviewCanvas.toBlob((blob)=>{
       if(!blob||!_dLive)return;
       _dPreviewPushInFlight=true;
@@ -1272,7 +1310,7 @@ function dashStartPreviewFramePushToSite(){
         })
         .catch(()=>{})
         .finally(()=>{_dPreviewPushInFlight=false});
-    },'image/jpeg',0.42);
+    },'image/jpeg',0.72);
   };
   tick();
   _dPreviewPushTimer=setInterval(tick,2500);
