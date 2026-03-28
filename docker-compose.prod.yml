@@ -13,9 +13,9 @@ services:
       - .env
     environment:
       DEV_MODE: "false"
-      DATABASE_URL: postgresql+psycopg://usking:${POSTGRES_PASSWORD:-change-me}@postgres:5432/usking
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////data/meiguwang.db}
       UPLOAD_DIR: /data/uploads
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: ${REDIS_URL:-}
       LIVE_VENDOR_STACK: ${LIVE_VENDOR_STACK:-livekit_cloud_mux}
       LIVE_INTERACTIVE_VENDOR: ${LIVE_INTERACTIVE_VENDOR:-livekit_cloud}
       LIVE_BROADCAST_VENDOR: ${LIVE_BROADCAST_VENDOR:-global_hls_cdn}
