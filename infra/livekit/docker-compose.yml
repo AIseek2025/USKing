@@ -2,12 +2,44 @@
 # 说明见同目录 README.md。不要在仓库中提交含真实 keys 的 livekit.yaml。
 
 services:
+  redis:
+    image: redis:7-alpine
+    network_mode: host
+    command:
+      - redis-server
+      - --bind
+      - 127.0.0.1
+      - --protected-mode
+      - "yes"
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+    restart: unless-stopped
+
   livekit:
     image: livekit/livekit-server:latest
     network_mode: host
+    depends_on:
+      - redis
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml:ro
       # TURN/TLS 直接由 LiveKit 终止时，需要能读取宿主机证书
       - /etc/letsencrypt:/etc/letsencrypt:ro
     command: --config /etc/livekit.yaml
+    restart: unless-stopped
+
+  egress:
+    image: livekit/egress:latest
+    network_mode: host
+    depends_on:
+      - redis
+      - livekit
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress.yaml
+    volumes:
+      - ./egress.yaml:/etc/egress.yaml:ro
+      - /data/live-hls:/data/live-hls
     restart: unless-stopped

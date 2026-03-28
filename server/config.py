@@ -67,6 +67,12 @@ LIVE_HLS_OUTPUT_DIR = os.path.abspath(
     os.getenv("LIVE_HLS_OUTPUT_DIR", os.path.join("static", "live-hls")).strip()
 )
 LIVE_EGRESS_WEBHOOK_SECRET = os.getenv("LIVE_EGRESS_WEBHOOK_SECRET", "").strip()
+LIVEKIT_API_URL = os.getenv("LIVEKIT_API_URL", "").strip()
+LIVEKIT_EGRESS_ENABLED = os.getenv("LIVEKIT_EGRESS_ENABLED", "false").lower() in ("1", "true", "yes")
+LIVEKIT_EGRESS_LAYOUT = os.getenv("LIVEKIT_EGRESS_LAYOUT", "speaker").strip() or "speaker"
+LIVEKIT_EGRESS_PRESET = os.getenv("LIVEKIT_EGRESS_PRESET", "H264_720P_30").strip() or "H264_720P_30"
+LIVEKIT_EGRESS_SEGMENT_DURATION = max(1, int(os.getenv("LIVEKIT_EGRESS_SEGMENT_DURATION", "2") or "2"))
+LIVEKIT_EGRESS_CALLBACK_URL = os.getenv("LIVEKIT_EGRESS_CALLBACK_URL", "").strip()
 LIVE_TURN_URLS = [
     u.strip() for u in os.getenv("LIVE_TURN_URLS", "").split(",") if u.strip()
 ]

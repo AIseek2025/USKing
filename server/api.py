@@ -57,6 +57,13 @@ from .live_media import (
     stream_media_descriptor,
     viewer_session_payload,
 )
+from .live_egress import (
+    apply_livekit_egress_webhook,
+    start_livekit_egress_for_stream,
+    stop_livekit_egress_for_stream,
+    validate_livekit_webhook,
+    webhook_error,
+)
 from .live_observability import (
     close_playback_session,
     egress_status_for_stream,
@@ -882,6 +889,18 @@ def get_live_host_session(
         manifest_url=(session.get("egress") or {}).get("hls_manifest_url", ""),
         enable_recording=bool((session.get("recording") or {}).get("enabled")),
     )
+    try:
+        start_livekit_egress_for_stream(
+            db,
+            request=request,
+            host_username=user.username,
+            stream=stream,
+            room_name=room_name_for_username(user.username),
+            manifest_url=(session.get("egress") or {}).get("hls_manifest_url", ""),
+            enable_recording=bool((session.get("egress") or {}).get("recording_enabled")),
+        )
+    except Exception:
+        _api_log.exception("failed to ensure livekit egress for host session")
     _decorate_session_with_egress_status(
         session,
         egress_status=egress_status_for_stream(
@@ -1040,6 +1059,17 @@ def live_egress_event(req: LiveEgressEvent, request: Request, db: Session = Depe
     return {"ok": True, "job": serialize_recording_job(row)}
 
 
+@router.post("/live/egress/livekit-webhook")
+async def live_egress_livekit_webhook(request: Request, db: Session = Depends(get_db)):
+    raw = await request.body()
+    try:
+        payload = validate_livekit_webhook(raw, request.headers.get("authorization", ""))
+    except Exception as exc:
+        raise HTTPException(403, f"invalid livekit webhook: {webhook_error(exc)}")
+    jobs = apply_livekit_egress_webhook(db, payload)
+    return {"ok": True, "event": payload.get("event", ""), "jobs": jobs}
+
+
 @router.get("/live/egress/status/{username}")
 def live_egress_status(username: str, db: Session = Depends(get_db)):
     host = db.query(User).filter(User.username == username).first()
@@ -1178,6 +1208,10 @@ def start_stream(
 async def stop_stream(user: User = Depends(require_user), db: Session = Depends(get_db)):
     stream = db.query(LiveStream).filter(LiveStream.user_id == user.id, LiveStream.is_live == True).first()
     if stream:
+        try:
+            stop_livekit_egress_for_stream(db, host_username=user.username, stream_id=stream.id)
+        except Exception:
+            _api_log.exception("failed to stop livekit egress")
         stream.is_live = False
         stream.ended_at = utcnow()
         db.commit()

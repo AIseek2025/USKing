@@ -1,0 +1,15 @@
+# 复制为 egress.yaml 后填写；勿提交真实配置到 Git
+
+api_key: your_api_key_here
+api_secret: your_api_secret_here
+ws_url: ws://127.0.0.1:7880
+
+redis:
+  address: 127.0.0.1:6379
+
+health_port: 7981
+template_port: 7980
+log_level: info
+
+# Chrome 组合录制在新版本中需要 SYS_ADMIN；docker-compose.yml 已补 cap_add
+enable_chrome_sandbox: false

@@ -35,6 +35,8 @@ LIVE_FALLBACK_MODE=legacy_jpeg
 LIVEKIT_WS_URL=wss://your-livekit-host
 LIVEKIT_API_KEY=your_api_key
 LIVEKIT_API_SECRET=your_api_secret
+LIVEKIT_EGRESS_ENABLED=true
+LIVEKIT_EGRESS_CALLBACK_URL=https://usking.vip/api/live/egress/livekit-webhook
 LIVE_HLS_BASE_URL=https://usking.vip/live-hls
 LIVE_HLS_OUTPUT_DIR=/data/live-hls
 LIVE_EGRESS_WEBHOOK_SECRET=replace_with_random_shared_secret
@@ -46,15 +48,30 @@ LIVE_EGRESS_WEBHOOK_SECRET=replace_with_random_shared_secret
 - `legacy_jpeg` 仅作为回退/诊断链路，不应继续作为默认观看体验。
 - 直播列表缩略图仍依赖 `push-frame -> last-frame` 的低频 JPEG 预览缓存；即使已接通 LiveKit，也不要删除这条轻量预览路径。
 - 若接入外部 egress / webhook，使用 `LIVE_EGRESS_WEBHOOK_SECRET` 保护 `POST /api/live/egress/event`，由媒体平面回写 HLS / recording job 状态。
+- 若使用 LiveKit Egress 正式闭环，建议额外设置：
+  - `LIVEKIT_EGRESS_ENABLED=true`
+  - `LIVEKIT_EGRESS_CALLBACK_URL=https://你的域名/api/live/egress/livekit-webhook`
+  - `LIVEKIT_API_URL=https://你的livekit域名`（若与 `LIVEKIT_WS_URL` 同域可省略）
 - 若由业务应用自己承接 HLS origin，则 `LIVE_HLS_OUTPUT_DIR` 目录中的内容会通过 `GET /live-hls/*` 对外暴露；`LIVE_HLS_BASE_URL` 应与该公开路径一致，例如 `https://usking.vip/live-hls`。
 
 ### Phase C 公开播放与回放
 
 - 公开页优先读取 `viewer-session` 中的 `broadcast plane` 与 `egress_status`；当 HLS 未 ready 或中途 fatal error 时，页面会重试并回退到 WebRTC / fallback，而不是直接黑屏。
+- 主播 `host-session` 下发时，后端会在开启 `LIVEKIT_EGRESS_ENABLED` 后自动向 LiveKit 发起 `StartRoomCompositeEgress`；停播时调用 `StopEgress`。
+- LiveKit 官方 webhook 入口为 `POST /api/live/egress/livekit-webhook`，使用 `Authorization: Bearer <jwt>` + `sha256` 校验请求体；旧的 `POST /api/live/egress/event` 仍保留给自定义回调或旁路脚本。
 - 运营或排障可查询：
   - `GET /api/live/egress/status/{username}`
   - `GET /api/live/recordings/{username}`
   - `GET /api/live/observability/summary`
+
+### LiveKit Egress 部署要点
+
+- 参考 [`infra/livekit/README.md`](../infra/livekit/README.md) 与同目录的：
+  - `docker-compose.yml`
+  - `livekit.yaml.example`
+  - `egress.yaml.example`
+- 生产建议让 `redis + livekit + egress` 同机部署，三者通过 `127.0.0.1` 通信，减少跨机时序和防火墙复杂度。
+- `egress` 需要挂载 `/data/live-hls:/data/live-hls`，这样 HLS 与 MP4 会直接写入业务侧对外暴露的 origin 目录。
 
 ### 独立 coturn（强烈推荐）
 

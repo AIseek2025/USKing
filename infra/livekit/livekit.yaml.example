@@ -4,6 +4,9 @@
 port: 7880
 log_level: info
 
+redis:
+  address: 127.0.0.1:6379
+
 rtc:
   tcp_port: 7881
   port_range_start: 55000
@@ -13,6 +16,12 @@ rtc:
 # API key / secret：须与 USKing 环境变量 LIVEKIT_API_KEY / LIVEKIT_API_SECRET 一致
 keys:
   your_api_key_here: your_api_secret_here
+
+# 建议同时开启全局 webhook，便于 room / participant / egress 生命周期统一回写
+# webhook:
+#   api_key: your_api_key_here
+#   urls:
+#     - https://usking.vip/api/live/egress/livekit-webhook
 
 # 若已部署独立 coturn（见 ../turn/README.md），建议关闭内置 turn，避免与站点 443/证书/端口冲突：
 # turn:
