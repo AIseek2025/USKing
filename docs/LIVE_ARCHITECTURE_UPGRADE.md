@@ -49,6 +49,7 @@
 - `server/live_observability.py` 负责 recording / HLS job 的生命周期：`planned -> running -> completed / failed / stopped`
 - `viewer-session` 会附带 `egress_status`；当 `broadcast plane` 被选中但 HLS 尚未 ready 时，业务层会优先回退 `interactive`，再回退 `fallback`
 - `templates/watch.html` + `static/js/hls-usking.js` 会对 HLS 首帧、fatal error、重试、回退做显式处理，避免公开页黑屏
+- `server/main.py` 会把 `LIVE_HLS_OUTPUT_DIR` 暴露到 `/live-hls/*`，便于同机部署时由业务应用承接 HLS origin
 
 ## 环境变量
 - `LIVE_MEDIA_BACKEND`

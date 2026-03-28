@@ -14,7 +14,7 @@ import json
 import logging
 import os
 
-from .config import DEV_MODE, assert_production_config, UPLOAD_DIR
+from .config import DEV_MODE, LIVE_HLS_OUTPUT_DIR, UPLOAD_DIR, assert_production_config
 
 from .database import engine, Base
 from .models import User, Album, AlbumVideo, SiteSetting, Bookmark, MediaItem, Like, Follow, Comment, Conversation, DirectMessage, LiveChatMessage
@@ -91,6 +91,22 @@ async def serve_static_upload(filename: str):
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Not Found")
     return FileResponse(path)
+
+
+@app.api_route("/live-hls/{subpath:path}", methods=["GET", "HEAD"])
+async def serve_live_hls_asset(subpath: str):
+    """HLS 清单与分片从 LIVE_HLS_OUTPUT_DIR 对外暴露，供公播页与回放使用。"""
+    rel = (subpath or "").lstrip("/")
+    if not rel or "\x00" in rel:
+        raise HTTPException(status_code=404, detail="Not Found")
+    path = os.path.join(LIVE_HLS_OUTPUT_DIR, rel)
+    real_root = os.path.realpath(LIVE_HLS_OUTPUT_DIR)
+    real_file = os.path.realpath(path)
+    if not real_file.startswith(real_root + os.sep) and real_file != real_root:
+        raise HTTPException(status_code=404, detail="Not Found")
+    if not os.path.isfile(real_file):
+        raise HTTPException(status_code=404, detail="Not Found")
+    return FileResponse(real_file)
 
 
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")

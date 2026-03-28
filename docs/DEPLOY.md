@@ -35,6 +35,8 @@ LIVE_FALLBACK_MODE=legacy_jpeg
 LIVEKIT_WS_URL=wss://your-livekit-host
 LIVEKIT_API_KEY=your_api_key
 LIVEKIT_API_SECRET=your_api_secret
+LIVE_HLS_BASE_URL=https://usking.vip/live-hls
+LIVE_HLS_OUTPUT_DIR=/data/live-hls
 LIVE_EGRESS_WEBHOOK_SECRET=replace_with_random_shared_secret
 ```
 
@@ -44,6 +46,7 @@ LIVE_EGRESS_WEBHOOK_SECRET=replace_with_random_shared_secret
 - `legacy_jpeg` 仅作为回退/诊断链路，不应继续作为默认观看体验。
 - 直播列表缩略图仍依赖 `push-frame -> last-frame` 的低频 JPEG 预览缓存；即使已接通 LiveKit，也不要删除这条轻量预览路径。
 - 若接入外部 egress / webhook，使用 `LIVE_EGRESS_WEBHOOK_SECRET` 保护 `POST /api/live/egress/event`，由媒体平面回写 HLS / recording job 状态。
+- 若由业务应用自己承接 HLS origin，则 `LIVE_HLS_OUTPUT_DIR` 目录中的内容会通过 `GET /live-hls/*` 对外暴露；`LIVE_HLS_BASE_URL` 应与该公开路径一致，例如 `https://usking.vip/live-hls`。
 
 ### Phase C 公开播放与回放
 

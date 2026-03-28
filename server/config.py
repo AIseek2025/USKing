@@ -63,6 +63,9 @@ LIVE_FALLBACK_ENABLED = os.getenv("LIVE_FALLBACK_ENABLED", "true").lower() in ("
 LIVE_FALLBACK_MODE = os.getenv("LIVE_FALLBACK_MODE", "legacy_jpeg").strip().lower()
 LIVE_SIGNALING_URL = os.getenv("LIVE_SIGNALING_URL", "").strip()
 LIVE_HLS_BASE_URL = os.getenv("LIVE_HLS_BASE_URL", "").strip()
+LIVE_HLS_OUTPUT_DIR = os.path.abspath(
+    os.getenv("LIVE_HLS_OUTPUT_DIR", os.path.join("static", "live-hls")).strip()
+)
 LIVE_EGRESS_WEBHOOK_SECRET = os.getenv("LIVE_EGRESS_WEBHOOK_SECRET", "").strip()
 LIVE_TURN_URLS = [
     u.strip() for u in os.getenv("LIVE_TURN_URLS", "").split(",") if u.strip()

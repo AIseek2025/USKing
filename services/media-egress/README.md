@@ -17,6 +17,7 @@
 - 业务仓不直接做转码；仅接收 egress 状态并写入 `LiveRecordingJob`
 - 推荐由媒体平面调用：`POST /api/live/egress/event`
 - 建议使用 `X-USKing-Egress-Secret` 对应 `LIVE_EGRESS_WEBHOOK_SECRET`
+- 若同机部署并由业务应用承接 origin，可把 HLS 文件写入 `LIVE_HLS_OUTPUT_DIR`，由 `GET /live-hls/*` 对外分发
 - 业务侧可查询：
   - `GET /api/live/egress/status/{username}`
   - `GET /api/live/recordings/{username}`
