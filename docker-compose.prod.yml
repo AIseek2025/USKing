@@ -27,6 +27,7 @@ services:
       LIVE_INTERACTIVE_ROLLOUT_PERCENT: ${LIVE_INTERACTIVE_ROLLOUT_PERCENT:-100}
     volumes:
       - usking-data:/data
+      - /data/live-hls:/data/live-hls
     depends_on:
       - postgres
       - redis
