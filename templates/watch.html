@@ -426,13 +426,14 @@ function _initWatchChatUI() {
   }
 }
 
-async function _startWatchWebRTC() {
+async function _startWatchWebRTC(opts) {
+  opts = opts || {};
   _stopWatchLiveKit();
-  _initWatchLiveKitAudioUI();
+  if (!opts.disableAudioPlayback) _initWatchLiveKitAudioUI();
   if (typeof USKingLiveKit === 'undefined') {
     if (_watchMedia.fallback_enabled !== false && _watchMedia.playback_mode !== 'hls') {
       _startLivePoll();
-      _startWatchAudio();
+      if (!opts.disableAudioPlayback) _startWatchAudio();
     }
     return;
   }
@@ -455,12 +456,17 @@ async function _startWatchWebRTC() {
       iceServers: sess.ice_servers || (sess.livekit && sess.livekit.ice_servers) || [],
       peerConnectionTimeout: 25000,
       videoEl: v,
-      onAudioTrack: function (track, publication, participant, audioEl) {
-        _registerWatchLiveKitAudio(track, publication, participant, audioEl);
-      },
-      onAudioPlaybackBlocked: function () {
-        _setWatchAudioHint(I18N.t('watch.audio_hint_webrtc_blocked'));
-      },
+      disableAudioPlayback: !!opts.disableAudioPlayback,
+      onAudioTrack: opts.disableAudioPlayback
+        ? null
+        : function (track, publication, participant, audioEl) {
+            _registerWatchLiveKitAudio(track, publication, participant, audioEl);
+          },
+      onAudioPlaybackBlocked: opts.disableAudioPlayback
+        ? null
+        : function () {
+            _setWatchAudioHint(I18N.t('watch.audio_hint_webrtc_blocked'));
+          },
       onFirstFrame: function () {
         if (wait) wait.style.display = 'none';
       },
@@ -486,7 +492,7 @@ async function _startWatchWebRTC() {
     if (v) v.style.display = 'none';
     if (_watchMedia.fallback_enabled !== false && _watchMedia.playback_mode !== 'hls') {
       _startLivePoll();
-      _startWatchAudio();
+      if (!opts.disableAudioPlayback) _startWatchAudio();
     }
   }
   return null;
@@ -603,7 +609,9 @@ async function loadWatch() {
     _initWatchChatUI();
     _startWatchChat();
     if (useWebRTC) {
-      _startWatchWebRTC();
+      /* 画面走 LiveKit，声音继续走站内双路音频，规避不同浏览器的 WebRTC 音频自动播放/解锁差异。 */
+      _startWatchWebRTC({ disableAudioPlayback: true });
+      _startWatchAudio();
     } else {
       if (useLegacyPreview) _startLivePoll();
       _startWatchAudio();

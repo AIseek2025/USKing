@@ -465,6 +465,10 @@
           }
         }
         if (track.kind === 'audio') {
+          if (opts.disableAudioPlayback) {
+            _log('viewer', 'skip livekit audio playback; external audio path enabled');
+            return;
+          }
           var a = track.attach();
           a.style.position = 'absolute';
           a.style.width = '1px';

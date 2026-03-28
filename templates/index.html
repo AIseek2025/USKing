@@ -1325,7 +1325,11 @@ async function dashEnsureRealtimeTransport(opts){
         peerConnectionTimeout:25000
       });
       dashStopFramePushToSite();
-      if(_dLiveAudioPub){_dLiveAudioPub.stop();_dLiveAudioPub=null;}
+      if(typeof USKingLiveAudio!=='undefined'){
+        if(_dLiveAudioPub){_dLiveAudioPub.stop();_dLiveAudioPub=null;}
+        _dLiveAudioPub=new USKingLiveAudio.Publisher((APP.token)||'');
+        _dLiveAudioPub.start(pageAud,_dMicStream);
+      }
       dashStartPreviewFramePushToSite();
       if(err)err.style.display='none';
       return true;
