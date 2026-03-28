@@ -35,6 +35,7 @@ LIVE_FALLBACK_MODE=legacy_jpeg
 LIVEKIT_WS_URL=wss://your-livekit-host
 LIVEKIT_API_KEY=your_api_key
 LIVEKIT_API_SECRET=your_api_secret
+LIVE_EGRESS_WEBHOOK_SECRET=replace_with_random_shared_secret
 ```
 
 含义：
@@ -42,6 +43,15 @@ LIVEKIT_API_SECRET=your_api_secret
 - `WebRTC` 是站内实时主链路。
 - `legacy_jpeg` 仅作为回退/诊断链路，不应继续作为默认观看体验。
 - 直播列表缩略图仍依赖 `push-frame -> last-frame` 的低频 JPEG 预览缓存；即使已接通 LiveKit，也不要删除这条轻量预览路径。
+- 若接入外部 egress / webhook，使用 `LIVE_EGRESS_WEBHOOK_SECRET` 保护 `POST /api/live/egress/event`，由媒体平面回写 HLS / recording job 状态。
+
+### Phase C 公开播放与回放
+
+- 公开页优先读取 `viewer-session` 中的 `broadcast plane` 与 `egress_status`；当 HLS 未 ready 或中途 fatal error 时，页面会重试并回退到 WebRTC / fallback，而不是直接黑屏。
+- 运营或排障可查询：
+  - `GET /api/live/egress/status/{username}`
+  - `GET /api/live/recordings/{username}`
+  - `GET /api/live/observability/summary`
 
 ### 独立 coturn（强烈推荐）
 

@@ -35,6 +35,7 @@ from .auth import (
 from .config import (
     UPLOAD_DIR,
     DEV_MODE,
+    LIVE_EGRESS_WEBHOOK_SECRET,
     MAX_UPLOAD_BYTES,
     ALLOWED_IMAGE_EXT,
     ALLOWED_MEDIA_EXT,
@@ -58,11 +59,15 @@ from .live_media import (
 )
 from .live_observability import (
     close_playback_session,
+    egress_status_for_stream,
     ensure_recording_jobs,
+    list_recording_jobs,
     mark_recording_jobs_stopped,
     open_playback_session,
     record_quality_event,
+    serialize_recording_job,
     summary_snapshot,
+    update_recording_job,
 )
 from .live_state import host_recent, live_state_store
 
@@ -119,6 +124,53 @@ def _assert_upload_size(data: bytes) -> None:
     if len(data) > MAX_UPLOAD_BYTES:
         mb = MAX_UPLOAD_BYTES // (1024 * 1024)
         raise HTTPException(400, f"文件过大（最大 {mb}MB）")
+
+
+def _latest_stream_for_host(db: Session, host: User, stream_id: Optional[int] = None) -> Optional[LiveStream]:
+    q = db.query(LiveStream).filter(LiveStream.user_id == host.id)
+    if stream_id is not None:
+        row = q.filter(LiveStream.id == stream_id).first()
+        if row:
+            return row
+    return q.order_by(LiveStream.started_at.desc(), LiveStream.id.desc()).first()
+
+
+def _decorate_session_with_egress_status(
+    session: Dict[str, Any],
+    *,
+    egress_status: Dict[str, Any],
+) -> Dict[str, Any]:
+    session["egress_status"] = egress_status
+    planes = session.setdefault("planes", {})
+    broadcast = planes.setdefault("broadcast", {})
+    hls = egress_status.get("hls") or {}
+    recording = egress_status.get("recording") or {}
+    if hls.get("manifest_url"):
+        broadcast["manifest_url"] = hls["manifest_url"]
+    broadcast["status"] = hls.get("status", "missing")
+    broadcast["ready"] = bool(hls.get("live_ready"))
+    rec_meta = session.setdefault("recording", {})
+    rec_meta["status"] = recording.get("status", "missing")
+    if recording.get("recording_url"):
+        rec_meta["recording_url"] = recording["recording_url"]
+    return session
+
+
+def _reroute_unready_broadcast_session(session: Dict[str, Any]) -> Dict[str, Any]:
+    delivery = session.get("delivery") or {}
+    if delivery.get("selected_plane") != "broadcast":
+        return session
+    hls = ((session.get("egress_status") or {}).get("hls")) or {}
+    if hls.get("live_ready"):
+        return session
+    if delivery.get("interactive_allowed") and ((session.get("livekit") or {}).get("token")):
+        delivery["selected_plane"] = "interactive"
+        delivery["reason"] = "broadcast_not_ready_promote_interactive"
+        return session
+    if session.get("fallback_enabled") is not False:
+        delivery["selected_plane"] = "fallback"
+        delivery["reason"] = "broadcast_not_ready_fallback_legacy"
+    return session
 
 
 def _get_setting(db: Session, key: str, default: str = "") -> str:
@@ -195,6 +247,18 @@ class LiveQoEEvent(BaseModel):
     ok: bool = True
     metric_value: Optional[float] = None
     metric_unit: str = Field(default="", max_length=32)
+    detail: Optional[Dict[str, Any]] = None
+
+
+class LiveEgressEvent(BaseModel):
+    host_username: str = Field(..., min_length=1, max_length=64)
+    egress_type: str = Field(..., pattern="^(hls|recording)$")
+    status: str = Field(..., pattern="^(planned|starting|running|completed|failed|stopped|disabled)$")
+    stream_id: Optional[int] = None
+    provider: str = Field(default="", max_length=64)
+    room_name: str = Field(default="", max_length=255)
+    manifest_url: str = Field(default="", max_length=1024)
+    recording_url: str = Field(default="", max_length=1024)
     detail: Optional[Dict[str, Any]] = None
 
 
@@ -818,6 +882,15 @@ def get_live_host_session(
         manifest_url=(session.get("egress") or {}).get("hls_manifest_url", ""),
         enable_recording=bool((session.get("recording") or {}).get("enabled")),
     )
+    _decorate_session_with_egress_status(
+        session,
+        egress_status=egress_status_for_stream(
+            db,
+            stream=stream,
+            host_username=user.username,
+            fallback_manifest_url=((session.get("egress") or {}).get("hls_manifest_url", "")),
+        ),
+    )
     live_state_store.mark_host_live(
         user_id=user.id,
         username=user.username,
@@ -845,6 +918,17 @@ def get_live_viewer_session(
         .first()
     )
     session = viewer_session_payload(host, stream, viewer, request.headers, intent)
+    if stream and stream.is_live:
+        _decorate_session_with_egress_status(
+            session,
+            egress_status=egress_status_for_stream(
+                db,
+                stream=stream,
+                host_username=host.username,
+                fallback_manifest_url=(((session.get("planes") or {}).get("broadcast") or {}).get("manifest_url", "")),
+            ),
+        )
+        _reroute_unready_broadcast_session(session)
     if stream and stream.is_live:
         open_playback_session(
             db,
@@ -907,7 +991,6 @@ def live_qoe_event(
 def live_observability_summary(db: Session = Depends(get_db)):
     active_recordings = (
         db.query(LiveRecordingJob)
-        .filter(LiveRecordingJob.status.in_(["planned", "running", "stopped"]))
         .order_by(LiveRecordingJob.id.desc())
         .limit(20)
         .all()
@@ -923,10 +1006,113 @@ def live_observability_summary(db: Session = Depends(get_db)):
                 "status": row.status,
                 "manifest_url": row.manifest_url,
                 "recording_url": row.recording_url,
+                "ended_at": row.ended_at.isoformat() if row.ended_at else None,
             }
             for row in active_recordings
         ],
     }
+
+
+@router.post("/live/egress/event")
+def live_egress_event(req: LiveEgressEvent, request: Request, db: Session = Depends(get_db)):
+    secret = LIVE_EGRESS_WEBHOOK_SECRET
+    if secret:
+        supplied = (request.headers.get("x-usking-egress-secret") or "").strip()
+        if supplied != secret:
+            raise HTTPException(403, "invalid egress secret")
+    host = db.query(User).filter(User.username == req.host_username).first()
+    if not host:
+        raise HTTPException(404, "host not found")
+    stream = _latest_stream_for_host(db, host, req.stream_id)
+    detail_json = json.dumps(req.detail or {}, ensure_ascii=False)
+    row = update_recording_job(
+        db,
+        host_username=host.username,
+        egress_type=req.egress_type,
+        status=req.status,
+        stream=stream,
+        provider=req.provider,
+        room_name=req.room_name,
+        manifest_url=req.manifest_url,
+        recording_url=req.recording_url,
+        detail_json=detail_json,
+    )
+    return {"ok": True, "job": serialize_recording_job(row)}
+
+
+@router.get("/live/egress/status/{username}")
+def live_egress_status(username: str, db: Session = Depends(get_db)):
+    host = db.query(User).filter(User.username == username).first()
+    if not host:
+        raise HTTPException(404)
+    stream = _latest_stream_for_host(db, host)
+    fallback_manifest_url = ""
+    if stream and stream.is_live:
+        session = host_session_payload(host, stream)
+        fallback_manifest_url = ((session.get("egress") or {}).get("hls_manifest_url", ""))
+    return {
+        "host_username": username,
+        "stream_id": stream.id if stream else None,
+        "stream_live": bool(stream and stream.is_live),
+        "egress": egress_status_for_stream(
+            db,
+            stream=stream,
+            host_username=username,
+            fallback_manifest_url=fallback_manifest_url,
+        ),
+    }
+
+
+@router.get("/live/recordings/{username}")
+def live_recordings_index(username: str, limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)):
+    host = db.query(User).filter(User.username == username).first()
+    if not host:
+        raise HTTPException(404)
+    jobs = list_recording_jobs(db, host_username=username, limit=limit * 2)
+    streams = {
+        row.id: row
+        for row in db.query(LiveStream)
+        .filter(LiveStream.user_id == host.id)
+        .order_by(LiveStream.started_at.desc(), LiveStream.id.desc())
+        .limit(limit)
+        .all()
+    }
+    grouped: Dict[int, Dict[str, Any]] = {}
+    for row in jobs:
+        if row.stream_id is None:
+            continue
+        entry = grouped.setdefault(
+            row.stream_id,
+            {
+                "stream_id": row.stream_id,
+                "title": (streams.get(row.stream_id).title if streams.get(row.stream_id) else ""),
+                "started_at": (
+                    streams.get(row.stream_id).started_at.isoformat()
+                    if streams.get(row.stream_id) and streams.get(row.stream_id).started_at
+                    else None
+                ),
+                "ended_at": (
+                    streams.get(row.stream_id).ended_at.isoformat()
+                    if streams.get(row.stream_id) and streams.get(row.stream_id).ended_at
+                    else None
+                ),
+                "host_username": username,
+                "manifest_url": "",
+                "recording_url": "",
+                "status": "",
+                "jobs": [],
+            },
+        )
+        job_view = serialize_recording_job(row)
+        entry["jobs"].append(job_view)
+        if row.egress_type == "hls" and row.manifest_url and not entry["manifest_url"]:
+            entry["manifest_url"] = row.manifest_url
+        if row.egress_type == "recording" and row.recording_url and not entry["recording_url"]:
+            entry["recording_url"] = row.recording_url
+        if not entry["status"]:
+            entry["status"] = row.status
+    items = sorted(grouped.values(), key=lambda item: item["stream_id"], reverse=True)[:limit]
+    return {"items": items}
 
 
 @router.post("/live/start")
@@ -1058,11 +1244,22 @@ def get_user_stream(username: str, request: Request, db: Session = Depends(get_d
     if not user:
         raise HTTPException(404)
     stream = db.query(LiveStream).filter(LiveStream.user_id == user.id, LiveStream.is_live == True).first()
+    media = stream_media_descriptor(username, stream, request.headers)
+    if stream:
+        _decorate_session_with_egress_status(
+            media,
+            egress_status=egress_status_for_stream(
+                db,
+                stream=stream,
+                host_username=username,
+                fallback_manifest_url=(((media.get("planes") or {}).get("broadcast") or {}).get("manifest_url", "")),
+            ),
+        )
     return {
         "stream": _stream_dict(stream) if stream else None,
         "user": _user_dict(user),
         "has_live_frame_buffer": username_has_frame(username),
-        "media": stream_media_descriptor(username, stream, request.headers),
+        "media": media,
     }
 
 

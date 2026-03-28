@@ -2,6 +2,7 @@
   'use strict';
 
   var SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.18/dist/hls.min.js';
+  var MEDIA_ERROR_RECOVERY_LIMIT = 1;
 
   function loadScript() {
     if (global.Hls) return Promise.resolve(global.Hls);
@@ -26,10 +27,26 @@
     if (!video || !url) return Promise.reject(new Error('missing video/url'));
     video.playsInline = true;
     video.setAttribute('playsinline', 'true');
+    function notifyLoaded() {
+      if (typeof opts.onLoaded === 'function') opts.onLoaded();
+    }
+    function notifyError(payload) {
+      if (typeof opts.onError === 'function') opts.onError(payload);
+    }
     if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = url;
+      var onNativeLoaded = function () {
+        notifyLoaded();
+      };
+      var onNativeError = function () {
+        notifyError({ fatal: true, message: 'native_hls_error' });
+      };
+      video.addEventListener('loadeddata', onNativeLoaded);
+      video.addEventListener('error', onNativeError);
       return Promise.resolve({
         destroy: function () {
+          video.removeEventListener('loadeddata', onNativeLoaded);
+          video.removeEventListener('error', onNativeError);
           try {
             video.pause();
           } catch (e) {}
@@ -49,10 +66,36 @@
         backBufferLength: 30,
         enableWorker: true,
       });
+      var mediaRecoveries = 0;
+      var onLoadedData = function () {
+        notifyLoaded();
+      };
+      video.addEventListener('loadeddata', onLoadedData);
+      hls.on(Hls.Events.ERROR, function (_event, data) {
+        var payload = {
+          fatal: !!(data && data.fatal),
+          type: data && data.type,
+          details: data && data.details,
+          message: data && (data.details || data.type) || 'hls_error',
+        };
+        notifyError(payload);
+        if (!data || !data.fatal) return;
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRecoveries < MEDIA_ERROR_RECOVERY_LIMIT) {
+          mediaRecoveries += 1;
+          try {
+            hls.recoverMediaError();
+            return;
+          } catch (e) {}
+        }
+        try {
+          hls.destroy();
+        } catch (e) {}
+      });
       hls.loadSource(url);
       hls.attachMedia(video);
       return {
         destroy: function () {
+          video.removeEventListener('loadeddata', onLoadedData);
           try {
             hls.destroy();
           } catch (e) {}

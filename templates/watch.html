@@ -16,6 +16,8 @@ let _chatSinceId = 0;
 let _watchAudioViewer = null;
 let _watchLiveKitRoom = null;
 let _watchHlsHandle = null;
+let _watchHlsRetryTimer = null;
+let _watchHlsRetryCount = 0;
 let _watchMedia = {};
 let _watchSessionToken = '';
 let _watchBootAt = 0;
@@ -50,6 +52,11 @@ function _stopWatchLiveKit() {
 }
 
 function _stopWatchHls() {
+  if (_watchHlsRetryTimer) {
+    clearTimeout(_watchHlsRetryTimer);
+    _watchHlsRetryTimer = null;
+  }
+  _watchHlsRetryCount = 0;
   if (_watchHlsHandle && typeof _watchHlsHandle.destroy === 'function') {
     try {
       _watchHlsHandle.destroy();
@@ -65,6 +72,18 @@ function _stopWatchHls() {
     } catch (e) {}
     v.style.display = 'none';
   }
+}
+
+function _setWatchWaitMessage(text) {
+  const wait = document.getElementById('liveWsWait');
+  if (!wait) return;
+  const lines = wait.querySelectorAll('p');
+  if (lines && lines[1]) lines[1].textContent = text || '';
+}
+
+function _showWatchAudioBar(show) {
+  const audioBar = document.getElementById('watchAudioBar');
+  if (audioBar) audioBar.style.display = show ? '' : 'none';
 }
 
 function _stopWatchAudio() {
@@ -567,6 +586,45 @@ async function _startWatchWebRTC(opts) {
   return null;
 }
 
+function _startWatchFallbackPlayback(startedAt) {
+  _stopWatchHls();
+  _showWatchAudioBar(true);
+  if (((_watchMedia || {}).delivery || {}).interactive_allowed && ((_watchMedia || {}).livekit || {}).token) {
+    return _startWatchWebRTC({ session: _watchMedia, startedAt: startedAt, disableAudioPlayback: false });
+  }
+  if ((_watchMedia || {}).fallback_enabled !== false) {
+    _startLivePoll();
+    _startWatchAudio();
+  }
+  return null;
+}
+
+function _handleWatchHlsFailure(sess, startedAt, err) {
+  const message = (err && (err.message || err.details || err.type)) || 'hls_error';
+  _reportWatchQoE('hls_error', {
+    ok: false,
+    detail: { message: message, retry_count: _watchHlsRetryCount },
+  });
+  if (_watchHlsRetryCount < 2) {
+    _watchHlsRetryCount += 1;
+    _setWatchWaitMessage(I18N.t('watch.hls_retrying'));
+    if (_watchHlsRetryTimer) clearTimeout(_watchHlsRetryTimer);
+    _watchHlsRetryTimer = setTimeout(function () {
+      _watchHlsRetryTimer = null;
+      _startWatchHls(sess, startedAt).catch(function (retryErr) {
+        _handleWatchHlsFailure(sess, startedAt, retryErr);
+      });
+    }, 1200 * _watchHlsRetryCount);
+    return;
+  }
+  _setWatchWaitMessage(I18N.t('watch.hls_failed_fallback'));
+  _reportWatchQoE('hls_fallback', {
+    ok: false,
+    detail: { message: message },
+  });
+  _startWatchFallbackPlayback(startedAt);
+}
+
 async function _startWatchHls(sess, startedAt) {
   _stopWatchLiveKit();
   _stopWatchAudio();
@@ -586,18 +644,26 @@ async function _startWatchHls(sess, startedAt) {
   if (!url || typeof USKingHls === 'undefined') {
     throw new Error('no hls session');
   }
-  _watchHlsHandle = await USKingHls.attach({ videoEl: hls, url: url });
-  hls.addEventListener(
-    'loadeddata',
-    function () {
+  let firstFrameReported = false;
+  _watchHlsHandle = await USKingHls.attach({
+    videoEl: hls,
+    url: url,
+    onLoaded: function () {
+      if (firstFrameReported) return;
+      firstFrameReported = true;
+      _watchHlsRetryCount = 0;
       if (wait) wait.style.display = 'none';
       _reportWatchQoE('first_frame_ms', {
         metric_value: Date.now() - (startedAt || Date.now()),
         metric_unit: 'ms',
       });
     },
-    { once: true }
-  );
+    onError: function (payload) {
+      if (payload && payload.fatal) {
+        _handleWatchHlsFailure(sess, startedAt, payload);
+      }
+    },
+  });
   hls.play().catch(() => {});
   return _watchHlsHandle;
 }
@@ -696,6 +762,7 @@ async function loadWatch() {
               <p style="font-size:11px;margin-top:8px;color:var(--text3)">${I18N.t('watch.media_backend')}：<strong>${_escapeHtml(mediaBackend)}</strong> · ${I18N.t('watch.playback_mode')}：<strong>${_escapeHtml(I18N.t('watch.mode_' + playbackMode) || playbackMode)}</strong></p>
               <p style="font-size:11px;margin-top:6px;color:var(--text3)">Plane：<strong>${_escapeHtml(selectedPlane)}</strong> · Provider：<strong>${_escapeHtml(selectedPlaneMeta.provider || mediaBackend)}</strong></p>
               ${selectedPlane !== 'fallback' ? `<p style="font-size:11px;margin-top:6px;color:var(--text3)">${I18N.t('watch.mode_note_fallback')}</p>` : ''}
+              ${useBroadcast ? `<p style="font-size:11px;margin-top:6px;color:var(--text3)">${I18N.t('watch.hls_wait_manifest')}</p>` : ''}
               <p style="font-size:11px;margin-top:8px;color:var(--text3)">${typeof I18N !== 'undefined' && I18N.lang === 'en' ? 'Room' : '当前房间'}：<strong>@${_escapeHtml(u.username)}</strong></p>
             </div>
           </div>
@@ -722,17 +789,16 @@ async function loadWatch() {
     _initWatchFit();
     _initWatchChatUI();
     _startWatchChat();
-    const audioBar = document.getElementById('watchAudioBar');
-    if (audioBar) audioBar.style.display = useBroadcast ? 'none' : '';
+    _showWatchAudioBar(!useBroadcast);
     if (useWebRTC) {
       _startWatchWebRTC({ session: media, startedAt: watchBootAt, disableAudioPlayback: false });
     } else if (useBroadcast) {
-      _startWatchHls(media, watchBootAt).catch(() => {
-        _reportWatchQoE('hls_start_failed', { ok: false });
-        if (media.fallback_enabled !== false) {
-          _startLivePoll();
-          _startWatchAudio();
-        }
+      _startWatchHls(media, watchBootAt).catch((err) => {
+        _reportWatchQoE('hls_start_failed', {
+          ok: false,
+          detail: { message: (err && err.message) || 'hls_start_failed' },
+        });
+        _handleWatchHlsFailure(media, watchBootAt, err);
       });
     } else {
       if (useLegacyPreview) _startLivePoll();

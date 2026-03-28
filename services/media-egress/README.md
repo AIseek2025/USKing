@@ -13,6 +13,14 @@
 - LiveKit Egress + FFmpeg
 - 或 SRS / Ant Media / 云直播服务
 
+## 业务侧对接约定
+- 业务仓不直接做转码；仅接收 egress 状态并写入 `LiveRecordingJob`
+- 推荐由媒体平面调用：`POST /api/live/egress/event`
+- 建议使用 `X-USKing-Egress-Secret` 对应 `LIVE_EGRESS_WEBHOOK_SECRET`
+- 业务侧可查询：
+  - `GET /api/live/egress/status/{username}`
+  - `GET /api/live/recordings/{username}`
+
 ## 不建议继续沿用的链路
 - `JPEG + polling`
 - `PCM over business WebSocket`

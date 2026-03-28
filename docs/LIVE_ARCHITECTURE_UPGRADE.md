@@ -24,7 +24,7 @@
 ## 当前仓库中的实现位置
 - 媒体平面配置：`server/config.py`
 - 媒体会话生成：`server/live_media.py`（区域、路由、描述符）；互动 RTC 适配：`server/live_media_providers.py`（`ManagedLiveKitProvider` / `LegacyFallbackProvider`，签发与 ICE 挂载）
-- 业务 API 接入：`server/api.py`
+- 业务 API 接入：`server/api.py`（含 egress 状态回写 `POST /api/live/egress/event`、状态查询 `GET /api/live/egress/status/{username}`、回放索引 `GET /api/live/recordings/{username}`）
 - 原型 fallback：`server/live_broadcast.py`
 - WebRTC（LiveKit）浏览器侧：`static/js/livekit-usking.js`；主播拉配置/建连统一入口：`static/js/live-host-publish.js`（`USKingLiveHost.connectHostRealtime`）；观看页 `templates/watch.html`；主播 UI `templates/index.html`、`app/live.html`
 
@@ -45,6 +45,11 @@
 - `webrtc`：实时房间主模式
 - `hls`：公开页、回放页、大规模观看
 
+## Phase C 状态闭环
+- `server/live_observability.py` 负责 recording / HLS job 的生命周期：`planned -> running -> completed / failed / stopped`
+- `viewer-session` 会附带 `egress_status`；当 `broadcast plane` 被选中但 HLS 尚未 ready 时，业务层会优先回退 `interactive`，再回退 `fallback`
+- `templates/watch.html` + `static/js/hls-usking.js` 会对 HLS 首帧、fatal error、重试、回退做显式处理，避免公开页黑屏
+
 ## 环境变量
 - `LIVE_MEDIA_BACKEND`
 - `LIVE_PUBLISH_MODE`
@@ -53,6 +58,7 @@
 - `LIVE_FALLBACK_MODE`
 - `LIVE_SIGNALING_URL`
 - `LIVE_HLS_BASE_URL`
+- `LIVE_EGRESS_WEBHOOK_SECRET`
 - `LIVE_TURN_URLS`
 - `LIVEKIT_WS_URL`
 - `LIVEKIT_API_KEY`

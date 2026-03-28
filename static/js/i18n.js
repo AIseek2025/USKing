@@ -227,6 +227,18 @@ const I18N = {
       zh: '当前房间启用了新媒体架构元数据，但页面仍可回退到 legacy 预览链路。',
       en: 'This room exposes new media metadata, but the page can still fall back to the legacy preview path.',
     },
+    'watch.hls_retrying': {
+      zh: '公开播放链路波动，正在重试 HLS…',
+      en: 'Public playback is unstable, retrying HLS…',
+    },
+    'watch.hls_failed_fallback': {
+      zh: '公开播放链路暂时不可用，正在回退到其它观看模式…',
+      en: 'Public playback is unavailable, falling back to another mode…',
+    },
+    'watch.hls_wait_manifest': {
+      zh: 'HLS 已被选为公播链路，但切片或清单可能仍在生成中。',
+      en: 'HLS was selected for public playback, but segments or the manifest may still be warming up.',
+    },
 
     // === Profile ===
     'profile.posts': { zh: '作品集', en: 'Portfolio' },
