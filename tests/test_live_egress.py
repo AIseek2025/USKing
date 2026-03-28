@@ -194,6 +194,62 @@ class LiveEgressTests(unittest.TestCase):
         self.assertEqual(recording.status, "running")
         self.assertEqual(recording.recording_url, "https://cdn.example.com/live/recording.mp4")
 
+    def test_apply_livekit_webhook_normalizes_local_output_paths(self):
+        live_observability.update_recording_job(
+            self.db,
+            host_username=self.host.username,
+            egress_type="hls",
+            status="starting",
+            stream=self.stream,
+            provider="livekit_egress",
+            room_name="usking-live-hoster",
+            manifest_url="https://usking.vip/live-hls/hoster/master.m3u8",
+            detail_json=json.dumps({"egress_id": "EG_456"}, ensure_ascii=False),
+        )
+        live_observability.update_recording_job(
+            self.db,
+            host_username=self.host.username,
+            egress_type="recording",
+            status="starting",
+            stream=self.stream,
+            provider="livekit_egress",
+            room_name="usking-live-hoster",
+            recording_url="https://usking.vip/live-hls/hoster/recordings/stream-1.mp4",
+            detail_json=json.dumps({"egress_id": "EG_456"}, ensure_ascii=False),
+        )
+        old_base = live_egress.LIVE_HLS_BASE_URL
+        old_root = live_egress.LIVE_HLS_OUTPUT_DIR
+        try:
+            live_egress.LIVE_HLS_BASE_URL = "https://usking.vip/live-hls"
+            live_egress.LIVE_HLS_OUTPUT_DIR = "/data/live-hls"
+            live_egress.apply_livekit_egress_webhook(
+                self.db,
+                {
+                    "event": "egress_ended",
+                    "egressInfo": {
+                        "egress_id": "EG_456",
+                        "room_name": "usking-live-hoster",
+                        "status": "EGRESS_COMPLETE",
+                        "segment_results": [
+                            {"live_playlist_location": "/data/live-hls/hoster/master.m3u8"}
+                        ],
+                        "file_results": [
+                            {"location": "/data/live-hls/hoster/recordings/stream-1.mp4"}
+                        ],
+                    },
+                },
+            )
+        finally:
+            live_egress.LIVE_HLS_BASE_URL = old_base
+            live_egress.LIVE_HLS_OUTPUT_DIR = old_root
+        rows = live_observability.list_recording_jobs(
+            self.db, host_username=self.host.username, stream_id=self.stream.id, limit=10
+        )
+        hls = next(row for row in rows if row.egress_type == "hls")
+        recording = next(row for row in rows if row.egress_type == "recording")
+        self.assertEqual(hls.manifest_url, "https://usking.vip/live-hls/hoster/master.m3u8")
+        self.assertEqual(recording.recording_url, "https://usking.vip/live-hls/hoster/recordings/stream-1.mp4")
+
     def test_validate_livekit_webhook_checks_body_hash(self):
         raw = json.dumps({"event": "egress_started"}, separators=(",", ":")).encode("utf-8")
         sha = base64.b64encode(hashlib.sha256(raw).digest()).decode("ascii")

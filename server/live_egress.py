@@ -293,6 +293,28 @@ def _normalize_file_info(info: Mapping[str, Any]) -> Mapping[str, Any]:
     return {}
 
 
+def _public_hls_url(raw: str, *, host_username: str) -> str:
+    value = str(raw or "").strip()
+    if not value:
+        return ""
+    if value.startswith(("http://", "https://")):
+        return value
+    base = LIVE_HLS_BASE_URL.rstrip("/")
+    root = os.path.realpath(LIVE_HLS_OUTPUT_DIR)
+    try:
+        if os.path.isabs(value):
+            rel = os.path.relpath(os.path.realpath(value), root)
+            if rel.startswith(".."):
+                return value
+            return f"{base}/{rel.replace(os.sep, '/')}" if base else value
+    except Exception:
+        return value
+    cleaned = value.lstrip("/")
+    if cleaned.startswith(f"{host_username}/") or cleaned.startswith("recordings/") or cleaned == "master.m3u8":
+        return f"{base}/{host_username}/{cleaned}" if base else value
+    return f"{base}/{cleaned}" if base else value
+
+
 def _username_from_room(room_name: str) -> str:
     raw = (room_name or "").strip()
     return raw[len(_ROOM_PREFIX):] if raw.startswith(_ROOM_PREFIX) else ""
@@ -338,13 +360,19 @@ def apply_livekit_egress_webhook(db: Any, event: Mapping[str, Any]) -> list[dict
     segments = _normalize_segments_info(info)
     files = _normalize_file_info(info)
     manifest_url = (
-        str(segments.get("live_playlist_location") or segments.get("livePlaylistLocation") or "")
-        or str(segments.get("playlist_location") or segments.get("playlistLocation") or "")
+        _public_hls_url(
+            str(segments.get("live_playlist_location") or segments.get("livePlaylistLocation") or ""),
+            host_username=host_username,
+        )
+        or _public_hls_url(
+            str(segments.get("playlist_location") or segments.get("playlistLocation") or ""),
+            host_username=host_username,
+        )
         or (hls_row.manifest_url if hls_row else "")
         or f"{LIVE_HLS_BASE_URL.rstrip('/')}/{host_username}/master.m3u8"
     )
     recording_url = (
-        str(files.get("location") or "")
+        _public_hls_url(str(files.get("location") or ""), host_username=host_username)
         or (recording_row.recording_url if recording_row else "")
     )
     detail = {
