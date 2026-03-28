@@ -1,4 +1,4 @@
-import json, logging, math, random, re, string, uuid, os
+import ipaddress, json, logging, math, random, re, string, uuid, os
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query
@@ -82,6 +82,16 @@ router = APIRouter(prefix="/api")
 router.include_router(_us_market_router)
 router.include_router(_live_ws_router)
 _api_log = logging.getLogger("meiguwang.api")
+
+
+def _trusted_livekit_webhook_source(host: str) -> bool:
+    raw = (host or "").strip()
+    if raw in {"127.0.0.1", "::1", "localhost"}:
+        return True
+    try:
+        return ipaddress.ip_address(raw).is_private
+    except Exception:
+        return False
 
 
 def _upload_ext(filename: Optional[str]) -> str:
@@ -1068,13 +1078,17 @@ async def live_egress_livekit_webhook(request: Request, db: Session = Depends(ge
     except Exception as exc:
         client_host = request.client.host if request.client else ""
         validation_error = webhook_error(exc)
-        if client_host not in {"127.0.0.1", "::1"}:
+        if not _trusted_livekit_webhook_source(client_host):
             raise HTTPException(403, f"invalid livekit webhook: {validation_error}")
         try:
             payload = json.loads(raw.decode("utf-8"))
         except Exception:
             raise HTTPException(403, f"invalid livekit webhook: {validation_error}")
-        _api_log.warning("accepted loopback livekit webhook without signature validation: %s", validation_error)
+        _api_log.warning(
+            "accepted trusted livekit webhook without signature validation from %s: %s",
+            client_host,
+            validation_error,
+        )
     event_name = str(payload.get("event", "")).strip()
     triggered_start = False
     if event_name == "participant_joined":
