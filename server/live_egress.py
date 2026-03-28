@@ -140,7 +140,14 @@ def _request_payload(
 ) -> dict[str, Any]:
     host_dir = os.path.join(LIVE_HLS_OUTPUT_DIR, username)
     os.makedirs(host_dir, exist_ok=True)
-    os.makedirs(os.path.join(host_dir, "recordings"), exist_ok=True)
+    recordings_dir = os.path.join(host_dir, "recordings")
+    os.makedirs(recordings_dir, exist_ok=True)
+    # Egress runs as uid 1001 / gid 0 in production; keep group-write on precreated dirs.
+    for path in (host_dir, recordings_dir):
+        try:
+            os.chmod(path, 0o775)
+        except OSError:
+            pass
     payload: dict[str, Any] = {
         "room_name": room_name,
         "layout": LIVEKIT_EGRESS_LAYOUT,
@@ -157,7 +164,7 @@ def _request_payload(
     if enable_recording:
         payload["file_outputs"] = [
             {
-                "filepath": os.path.join(host_dir, "recordings", _recording_filename(stream_id)),
+                "filepath": os.path.join(recordings_dir, _recording_filename(stream_id)),
                 "file_type": "MP4",
             }
         ]
