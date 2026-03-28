@@ -23,10 +23,10 @@
 
 ## 当前仓库中的实现位置
 - 媒体平面配置：`server/config.py`
-- 媒体会话生成：`server/live_media.py`
+- 媒体会话生成：`server/live_media.py`（区域、路由、描述符）；互动 RTC 适配：`server/live_media_providers.py`（`ManagedLiveKitProvider` / `LegacyFallbackProvider`，签发与 ICE 挂载）
 - 业务 API 接入：`server/api.py`
 - 原型 fallback：`server/live_broadcast.py`
-- WebRTC（LiveKit）浏览器侧：`static/js/livekit-usking.js`；观看页 `templates/watch.html`；主播 `templates/index.html`、`app/live.html`
+- WebRTC（LiveKit）浏览器侧：`static/js/livekit-usking.js`；主播拉配置/建连统一入口：`static/js/live-host-publish.js`（`USKingLiveHost.connectHostRealtime`）；观看页 `templates/watch.html`；主播 UI `templates/index.html`、`app/live.html`
 
 ## 媒体后端选择
 ### 默认推荐

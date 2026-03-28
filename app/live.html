@@ -306,6 +306,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 
 <script src="/static/js/live-audio.js?v=2"></script>
 <script src="/static/js/livekit-usking.js?v=12"></script>
+<script src="/static/js/live-host-publish.js?v=1"></script>
 <script>
 const sources = [];
 let compositeRAF = null;
@@ -917,53 +918,43 @@ async function toggleLive() {
     }
 
     let usedLiveKit = false;
-    try {
+    if (typeof USKingLiveHost !== 'undefined') {
       const h = { Accept: 'application/json' };
       try {
         const tok = localStorage.getItem('token');
         if (tok) h['Authorization'] = 'Bearer ' + tok;
       } catch (e) {}
-      const cfgRes = await fetch(location.origin + '/api/live/media/config', {
-        credentials: 'include',
-        headers: h,
-      });
-      const cfg = await cfgRes.json();
-      const wantLk =
-        cfg.planes &&
-        cfg.planes.interactive &&
-        cfg.planes.interactive.enabled &&
-        cfg.livekit &&
-        cfg.livekit.ready &&
-        (cfg.publish_mode === 'webrtc' || cfg.publish_mode === 'livekit');
-      if (wantLk && typeof USKingLiveKit !== 'undefined') {
-        const hsRes = await fetch(location.origin + '/api/live/media/host-session', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { ...h, 'Content-Type': 'application/json' },
-        });
-        const hs = await hsRes.json();
-        const lk = hs.session && hs.session.livekit;
-        if (lk && lk.token) {
-          await USKingLiveKit.loadScript();
-          const cap = canvas.captureStream(30);
-          const vtrack = cap.getVideoTracks()[0];
-          liveKitRoom = await USKingLiveKit.hostConnect({
-            url: lk.ws_url,
-            token: lk.token,
-            videoTrack: vtrack,
-            audioPageTrack: pageAudTrack,
-            audioMicTrack: micTrack,
-            iceServers:
-              (hs.session && hs.session.ice_servers) ||
-              (hs.session && hs.session.livekit && hs.session.livekit.ice_servers) ||
-              [],
-            peerConnectionTimeout: 25000,
+      const origin = location.origin;
+      const r = await USKingLiveHost.connectHostRealtime({
+        canvasEl: canvas,
+        allowMissingVideoTrack: true,
+        requireLiveVideoTrack: false,
+        loadConfig: async function () {
+          const cfgRes = await fetch(origin + '/api/live/media/config', {
+            credentials: 'include',
+            headers: h,
           });
-          usedLiveKit = true;
-        }
-      }
-    } catch (e) {
-      console.warn('LiveKit host', e);
+          return cfgRes.json();
+        },
+        loadHostSession: async function () {
+          const hsRes = await fetch(origin + '/api/live/media/host-session', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { ...h, 'Content-Type': 'application/json' },
+          });
+          return hsRes.json();
+        },
+        audioPageTrack: pageAudTrack,
+        audioMicTrack: micTrack,
+        showError: false,
+        onError: function (e) {
+          console.warn('LiveKit host', e);
+        },
+      });
+      usedLiveKit = r.used;
+      liveKitRoom = r.room;
+    } else {
+      console.warn('USKingLiveHost not loaded');
     }
 
     if (!usedLiveKit) {

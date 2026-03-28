@@ -139,3 +139,4 @@ flowchart LR
 | 2026-03-26 | 初版：gstack 嵌入说明、全链路证据索引、本轮架构迭代范围与下一跳 |
 | 2026-03-26 | Phase 2：LiveKit 客户端、`watch.html`/`index.html`/`live.html` 接入、`live_media.py` 匿名 identity 修复、文档与 `.env.example` 更新 |
 | 2026-03-26 | Phase 2 补强：WebRTC 观看页音频解锁与分轨提示、LiveKit 下低频列表预览恢复、部署文档明确主链路与 fallback 边界 |
+| 2026-03-28 | Phase A：`server/live_media_providers.py`（`MediaProvider` / `ManagedLiveKitProvider` / `LegacyFallbackProvider`），`live_media` host/viewer 会话统一挂载 `providers` 元数据；Phase B：`static/js/live-host-publish.js`（`USKingLiveHost.connectHostRealtime`），`templates/base.html` + `app/live.html` 引入，`index.html`/`live.html` 主播建连走 SDK；测试 `tests/test_live_media_providers.py`；架构说明见 `LIVE_ARCHITECTURE_UPGRADE.md` |

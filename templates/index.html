@@ -1332,45 +1332,37 @@ async function dashEnsureRealtimeTransport(opts){
   _dLiveKitConnecting=(async function(){
     const cv=document.getElementById('dashCanvas');
     if(!cv||!cv.width||(!_dSources.length&&!_dCamStream))return false;
+    if(typeof USKingLiveHost==='undefined'){console.error('[dash] USKingLiveHost missing');return false;}
     if((opts.ensureMic!==false)&&document.getElementById('dashCapMicAudio')&&document.getElementById('dashCapMicAudio').checked&&(!_dMicStream||!_dMicStream.getAudioTracks||!_dMicStream.getAudioTracks().length)){
       try{_dMicStream=await navigator.mediaDevices.getUserMedia({audio:{noiseSuppression:true,echoCancellation:true,autoGainControl:true},video:false});}catch(e){console.warn('mic',e);}
     }
-    var pageAud=null,pageAudTrack=null;
+    var pageAudTrack=null;
     for(var si=0;si<_dSources.length;si++){
       if(_dSources[si].stream.getAudioTracks&&_dSources[si].stream.getAudioTracks().length){
-        pageAud=_dSources[si].stream;
         pageAudTrack=_dSources[si].stream.getAudioTracks()[0];
         break;
       }
     }
     var micTrack=_dMicStream&&_dMicStream.getAudioTracks&&_dMicStream.getAudioTracks().length?_dMicStream.getAudioTracks()[0]:null;
     if((opts.warnOnMissingPageAudio!==false)&&dashMissingPageAudioRequested(pageAudTrack))alert(_t('dash.page_audio_missing'));
-    try{
-      var cfg=await APP.api('GET','/api/live/media/config');
-      var wantLk=cfg.planes&&cfg.planes.interactive&&cfg.planes.interactive.enabled&&cfg.livekit&&cfg.livekit.ready&&(cfg.publish_mode==='webrtc'||cfg.publish_mode==='livekit');
-      if(!(wantLk&&typeof USKingLiveKit!=='undefined'))return false;
-      var hs=await APP.api('POST','/api/live/media/host-session');
-      var lk=hs.session&&hs.session.livekit;
-      if(!lk||!lk.token)return false;
-      await USKingLiveKit.loadScript();
-      var cap=cv.captureStream(30);
-      var vtrack=cap.getVideoTracks&&cap.getVideoTracks().length?cap.getVideoTracks()[0]:null;
-      if(!vtrack||vtrack.readyState!=='live')throw new Error('当前页还没有可发布的视频轨');
-      _dLiveKitRoom=await USKingLiveKit.hostConnect({
-        url:lk.ws_url,token:lk.token,videoTrack:vtrack,
-        audioPageTrack:pageAudTrack,audioMicTrack:micTrack,
-        iceServers:(hs.session&&hs.session.ice_servers)||(hs.session&&hs.session.livekit&&hs.session.livekit.ice_servers)||[],
-        peerConnectionTimeout:25000
-      });
-      dashStopFramePushToSite();
-      dashStartPreviewFramePushToSite();
-      if(err)err.style.display='none';
-      return true;
-    }catch(e){
-      console.error('[LK:host] ensure realtime failed →',e&&e.message||e);
-      if(opts.showError!==false&&err){err.textContent='WebRTC: '+(e&&e.message||'连接失败，暂时回退');err.style.display='block';}
-      return false;
-    }
+    var r=await USKingLiveHost.connectHostRealtime({
+      canvasEl:cv,
+      loadConfig:function(){return APP.api('GET','/api/live/media/config');},
+      loadHostSession:function(){return APP.api('POST','/api/live/media/host-session');},
+      audioPageTrack:pageAudTrack,
+      audioMicTrack:micTrack,
+      captureFps:30,
+      showError:opts.showError!==false,
+      errorEl:err,
+      errorPrefix:'WebRTC: ',
+      onConnected:function(){
+        dashStopFramePushToSite();
+        dashStartPreviewFramePushToSite();
+        if(err)err.style.display='none';
+      }
+    });
+    _dLiveKitRoom=r.room;
+    return !!r.used;
   })();
   try{
     return await _dLiveKitConnecting;

@@ -3,13 +3,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-import json
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Optional
-
-from jose import jwt
 
 from .config import (
     LIVE_BROADCAST_VENDOR,
@@ -47,6 +43,7 @@ from .config import (
     TURN_TLS_URL,
     TURN_UDP_URL,
 )
+from .live_media_providers import apply_session_provider_metadata, get_managed_livekit_provider
 from .models import LiveStream, User
 
 
@@ -205,48 +202,13 @@ def build_turn_ice_servers(identity: str, region: str = "global") -> list[dict[s
     return servers
 
 
-def _livekit_token(
-    *,
-    identity: str,
-    room: str,
-    can_publish: bool,
-    can_subscribe: bool,
-    can_publish_data: bool = True,
-    name: str = "",
-    metadata: Optional[dict[str, Any]] = None,
-    ttl_hours: int = 6,
-) -> str:
-    now = datetime.now(timezone.utc)
-    meta = metadata or {}
-    payload = {
-        "iss": LIVEKIT_API_KEY,
-        "sub": identity,
-        "iat": int(now.timestamp()),
-        "nbf": int(now.timestamp()),
-        "exp": int((now + timedelta(hours=ttl_hours)).timestamp()),
-        "name": name or identity,
-        "metadata": json.dumps(meta) if meta else "{}",
-        "video": {
-            "roomJoin": True,
-            "room": room,
-            "canPublish": can_publish,
-            "canSubscribe": can_subscribe,
-            "canPublishData": can_publish_data,
-        },
-    }
-    return jwt.encode(payload, LIVEKIT_API_SECRET, algorithm="HS256")
-
-
 def _stable_bucket(seed: str) -> int:
     digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()
     return int(digest[:8], 16) % 100
 
 
 def _interactive_available() -> bool:
-    vendor = LIVE_INTERACTIVE_VENDOR
-    if "livekit" in vendor:
-        return livekit_ready()
-    return False
+    return get_managed_livekit_provider() is not None
 
 
 def _broadcast_available(region: str) -> bool:
@@ -490,24 +452,10 @@ def host_session_payload(
             },
         },
     }
-    ice: list[dict[str, Any]] = []
-    if _interactive_available():
-        hid = f"host:{user.id}"
-        ice = build_turn_ice_servers(hid, region)
-        payload["livekit"] = {
-            "ws_url": livekit_ws_url_for_region(region),
-            "room_name": room,
-            "token": _livekit_token(
-                identity=hid,
-                room=room,
-                can_publish=True,
-                can_subscribe=True,
-                name=user.display_name or user.username,
-                metadata={"role": "host", "username": user.username},
-            ),
-            "ice_servers": ice,
-        }
-        payload["ice_servers"] = ice
+    lk = get_managed_livekit_provider()
+    apply_session_provider_metadata(payload, interactive_active=bool(lk))
+    if lk:
+        lk.attach_host_session(payload, user=user, stream=stream, region=region, room=room)
     payload["planes"]["interactive"]["room_name"] = room
     payload["planes"]["broadcast"]["manifest_url"] = hls_manifest_for_username(user.username, region)
     return payload
@@ -538,24 +486,18 @@ def viewer_session_payload(
     }
     payload["planes"]["interactive"]["room_name"] = room
     payload["planes"]["broadcast"]["manifest_url"] = hls_manifest_for_username(host.username, region)
-    if _interactive_available() and stream and stream.is_live and delivery["interactive_allowed"]:
-        ice = build_turn_ice_servers(identity, region)
-        payload["livekit"] = {
-            "ws_url": livekit_ws_url_for_region(region),
-            "room_name": room,
-            "token": _livekit_token(
-                identity=identity,
-                room=room,
-                can_publish=False,
-                can_subscribe=True,
-                name=(viewer.display_name if viewer else "") or identity,
-                metadata={
-                    "role": "viewer",
-                    "host_username": host.username,
-                    "viewer_id": viewer.id if viewer else "",
-                },
-            ),
-            "ice_servers": ice,
-        }
-        payload["ice_servers"] = ice
+    lk = get_managed_livekit_provider()
+    will_attach = bool(lk and stream and stream.is_live and delivery["interactive_allowed"])
+    apply_session_provider_metadata(payload, interactive_active=will_attach)
+    if will_attach and lk:
+        lk.attach_viewer_session(
+            payload,
+            host=host,
+            viewer=viewer,
+            stream=stream,
+            delivery=delivery,
+            identity=identity,
+            region=region,
+            room=room,
+        )
     return payload
